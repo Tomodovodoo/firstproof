@@ -1,0 +1,15 @@
+name = "firstproof"
+version = "0.1.0"
+defaultTargets = ["firstproof"]
+
+[[require]]
+name = "formal_conjectures"
+git = "https://github.com/google-deepmind/formal-conjectures.git"
+rev = "9377c74314801a1f7dd79219d0e316d087b142b1"
+
+[[lean_lib]]
+name = "Firstproof"
+
+[[lean_exe]]
+name = "firstproof"
+root = "Main"
