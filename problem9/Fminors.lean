@@ -1,4 +1,4 @@
-import FormalConjectures.Util.ProblemImports
+import Mathlib
 
 open scoped BigOperators
 open Classical

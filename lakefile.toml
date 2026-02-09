@@ -3,9 +3,9 @@ version = "0.1.0"
 defaultTargets = ["firstproof"]
 
 [[require]]
-name = "formal_conjectures"
-git = "https://github.com/google-deepmind/formal-conjectures.git"
-rev = "9377c74314801a1f7dd79219d0e316d087b142b1"
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "v4.24.0"
 
 [[lean_lib]]
 name = "Firstproof"

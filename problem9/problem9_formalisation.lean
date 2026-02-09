@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -/
 
-import FormalConjectures.Util.ProblemImports
+import Mathlib.LinearAlgebra.Matrix.Determinant.Basic
+import Mathlib.RingTheory.MvPolynomial.Basic
+import Mathlib.Data.Real.Basic
 
 /-!
 # Theorem 9 (arXiv:2602.05192)
@@ -23,11 +25,11 @@ For `n ≥ 5` and `A : Fin n → ℝ^{3×4}`, define tensors `Q^(αβγδ) ∈ �
 determinants of stacked rows from `A^(α), A^(β), A^(γ), A^(δ)`.
 
 The statement asks for uniformly degree-bounded polynomial relations in the entries of the scaled
-family `λ_(αβγδ) Q^(αβγδ)` which characterize when `λ` factors as `u_α v_β w_γ x_δ` on indices where
-`(α,β,γ,δ)` are not all equal.
+family `λ_(αβγδ) Q^(αβγδ)` which characterize when `λ` factors as `u_α v_β w_γ x_δ` on indices
+where `(α,β,γ,δ)` are not all equal.
 
-Polynomial maps are modeled via `MvPolynomial`; `ZariskiGeneric` is an explicit nonvanishing
-predicate on the entries of `A`.
+Polynomial maps are modeled via `MvPolynomial`. "Zariski-generic" is encoded by the existence of a
+nonzero polynomial in the camera entries whose nonvanishing defines the required open condition.
 -/
 
 open scoped BigOperators
@@ -57,21 +59,6 @@ def scaleQ {n : ℕ} (lam : Lambda n) (Q : QFamily n) : QFamily n :=
 
 /-- Indices for polynomial coordinates on the space of inputs `A : Fin n → ℝ^{3×4}`. -/
 abbrev AIndex (n : ℕ) := Fin n × Fin 3 × Fin 4
-
-/--
-A concrete Zariski-open “genericity” condition on `A`.
-
-We require that **every** `3×3` minor of each `A i : ℝ^{3×4}` is nonzero.
-Equivalently, each `A i` has full row-rank and is in general position with respect to the
-coordinate hyperplanes. This is a nonempty Zariski-open condition.
-
-Note: the paper's term “Zariski-generic” is informal; this definition provides one explicit
-Zariski-open condition that is suitable for formalization.
--/
-def ZariskiGeneric {n : ℕ} (A : Fin n → Matrix3x4) : Prop :=
-  ∀ i : Fin n,
-    ∀ cols : Fin 3 → Fin 4, Function.Injective cols →
-      Matrix.det (fun r c : Fin 3 => A i r (cols c)) ≠ 0
 
 /-- The `4×4` matrix whose rows are `A^(α)(i,:)`, `A^(β)(j,:)`, `A^(γ)(k,:)`, `A^(δ)(ℓ,:)`.
 (Row order: `(α,i), (β,j), (γ,k), (δ,ℓ)`.) -/
@@ -121,20 +108,38 @@ def PolyMap.UniformDegreeBound {n N : ℕ} (d : ℕ) (F : PolyMap n N) : Prop :=
 /-- A vector of reals is identically zero. -/
 def IsZeroVec {N : ℕ} (v : Fin N → ℝ) : Prop := ∀ t, v t = 0
 
-/-- A formal version of the paper's question (statement only; proof is `sorry`). -/
-@[category research open, AMS 14]
-theorem nine : answer(sorry) ↔
+/-- Evaluate a polynomial in camera entries at a concrete camera family `A`. -/
+def evalCameraPolynomial {n : ℕ} (p : MvPolynomial (AIndex n) ℝ)
+    (A : Fin n → Matrix3x4) : ℝ :=
+  p.eval (fun idx : AIndex n => A idx.1 idx.2.1 idx.2.2)
+
+/--
+## Theorem 9 (arXiv:2602.05192)
+
+There exists a polynomial map `F` with uniform degree bound `d` (independent of `n`) such that
+for all `n ≥ 5`, for Zariski-generic cameras `A`, and for all scalars `λ` supported exactly on
+non-identical quadruples:
+
+`F(λ · Q) = 0  ↔  λ factors as u_α v_β w_γ x_δ`.
+
+"Zariski-generic" is encoded by the existence of a **nonzero polynomial** `G` in the camera
+entries (`AIndex n = Fin n × Fin 3 × Fin 4`) such that whenever `G(A) ≠ 0`, the biconditional
+holds. A nonzero polynomial over `ℝ^k` is nonvanishing on a nonempty Zariski-open dense set.
+-/
+theorem nine :
     ∃ (d : ℕ),
       ∀ n : ℕ, 5 ≤ n →
         ∃ (N : ℕ) (F : PolyMap n N),
           PolyMap.UniformDegreeBound d F ∧
-          ∀ (A : Fin n → Matrix3x4), ZariskiGeneric A →
-            ∀ (lam : Lambda n),
-              (∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ) →
-              IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
-                (∃ (u v w x : Fin n → ℝˣ),
-                  ∀ α β γ δ, NotIdentical α β γ δ →
-                    lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ)) := by
+          ∃ (G : MvPolynomial (AIndex n) ℝ), G ≠ 0 ∧
+            ∀ (A : Fin n → Matrix3x4),
+              evalCameraPolynomial G A ≠ 0 →
+              ∀ (lam : Lambda n),
+                (∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ) →
+                IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
+                  (∃ (u v w x : Fin n → ℝˣ),
+                    ∀ α β γ δ, NotIdentical α β γ δ →
+                      lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ)) := by
   sorry
 
 end Arxiv.«2602.05192»
