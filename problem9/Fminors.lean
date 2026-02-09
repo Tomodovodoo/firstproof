@@ -106,19 +106,94 @@ noncomputable def FminorsRaw (n : ℕ) :
     PolyMap n (Fintype.card (MinorIndex n)) :=
   fun t => FminorsByIndex n ((Fintype.equivFin (MinorIndex n)).symm t)
 
-/-- A guaranteed bounded witness map (degree `0 ≤ 5`). -/
-def Fzero (n : ℕ) : PolyMap n 0 := fun t => Fin.elim0 t
+/-!
+## Degree bounds
 
-lemma Fzero_degree_le_five (n : ℕ) : PolyMap.UniformDegreeBound 5 (Fzero n) := by
+We now prove that every coordinate of `FminorsRaw` has total degree `≤ 5`.
+-/
+
+open MvPolynomial
+
+/-- A determinant total-degree bound for `5×5` matrices of polynomials.
+
+If every entry has `totalDegree ≤ 1`, then the determinant has `totalDegree ≤ 5`.
+-/
+lemma totalDegree_det_le_five {σ : Type*}
+    (M : Matrix (Fin 5) (Fin 5) (MvPolynomial σ ℝ))
+    (hM : ∀ i j, (M i j).totalDegree ≤ 1) :
+    M.det.totalDegree ≤ 5 := by
+  classical
+  -- Expand by Leibniz.
+  -- We use `det_apply'` so the sign appears as multiplication by a scalar `ε σ ∈ R`.
+  rw [Matrix.det_apply']
+  -- Unfold the `Fintype.sum` and `Fintype.prod` to `Finset.univ`.
+  simp [Fintype.sum, Fintype.prod]
+  -- Now apply the finset sum bound.
+  refine MvPolynomial.totalDegree_finsetSum_le (s := Finset.univ)
+    (f := fun σ : Equiv.Perm (Fin 5) => (Matrix.ε (R := MvPolynomial σ ℝ) σ) *
+      (Finset.univ.prod fun i : Fin 5 => M (σ i) i)) (d := 5) ?_
+  intro σ _
+  -- Bound each term.
+  have hprod : (Finset.univ.prod fun i : Fin 5 => M (σ i) i).totalDegree ≤ 5 := by
+    -- Product total degree ≤ sum of total degrees.
+    have := MvPolynomial.totalDegree_finset_prod (s := Finset.univ)
+      (f := fun i : Fin 5 => M (σ i) i)
+    -- Each factor has degree ≤ 1.
+    have hsum : (∑ i : Fin 5, (M (σ i) i).totalDegree) ≤ 5 := by
+      -- Compare termwise with `1`.
+      have : (∑ i : Fin 5, (M (σ i) i).totalDegree) ≤ ∑ i : Fin 5, (1 : ℕ) := by
+        refine Finset.sum_le_sum ?_
+        intro i _
+        exact hM (σ i) i
+      -- Evaluate the RHS.
+      simpa using this
+    exact this.trans hsum
+  -- Multiply by a scalar of degree 0.
+  have hε : (Matrix.ε (R := MvPolynomial σ ℝ) σ).totalDegree = 0 := by
+    -- `ε σ` is `1` or `-1`.
+    simp [Matrix.ε]
+  -- Now combine.
+  have := MvPolynomial.totalDegree_mul
+    (Matrix.ε (R := MvPolynomial σ ℝ) σ)
+    (Finset.univ.prod fun i : Fin 5 => M (σ i) i)
+  -- `totalDegree_mul` gives `≤` sum.
+  have : ((Matrix.ε (R := MvPolynomial σ ℝ) σ) * (Finset.univ.prod fun i : Fin 5 => M (σ i) i)).totalDegree
+      ≤ 0 + 5 := by
+    simpa [hε] using (this.trans (add_le_add_left hprod 0))
+  simpa using this
+
+lemma unfoldingEntry_totalDegree {n : ℕ} (m : UnfoldingMode) (r : RowTy n m) (c : ColTy n m) :
+    (unfoldingEntry (n := n) m r c).totalDegree = 1 := by
+  classical
+  cases m <;> simp [unfoldingEntry, qVar]
+
+lemma minorDetPoly_totalDegree_le_five {n : ℕ} (idx : MinorIndex n) :
+    (minorDetPoly (n := n) idx).totalDegree ≤ 5 := by
+  classical
+  rcases idx with ⟨m, s⟩
+  -- Apply the determinant degree bound.
+  refine totalDegree_det_le_five (σ := QIndex n)
+    (M := fun r c : Fin 5 => unfoldingEntry (n := n) m (s.rows r) (s.cols c)) ?_
+  intro i j
+  -- each entry is a variable, hence degree 1
+  simpa [unfoldingEntry_totalDegree (n := n) m (s.rows i) (s.cols j)]
+
+lemma FminorsRaw_degree_le_five (n : ℕ) :
+    PolyMap.UniformDegreeBound 5 (FminorsRaw n) := by
   intro t
-  exact (Fin.elim0 t)
+  -- unfold and apply the minor det bound
+  classical
+  dsimp [FminorsRaw, FminorsByIndex, minorDetPoly]
+  -- `t` corresponds to some minor index.
+  exact minorDetPoly_totalDegree_le_five (n := n)
+    ((Fintype.equivFin (MinorIndex n)).symm t)
 
-/-- Existence form requested by the task packet. -/
+/-- Existence form: the `5×5` minor map itself. -/
 def Fminors : ∀ n, ∃ N, PolyMap n N :=
-  fun n => ⟨0, Fzero n⟩
+  fun n => ⟨Fintype.card (MinorIndex n), FminorsRaw n⟩
 
 lemma Fminors_uniform_degree_bound_le_five :
     ∀ n, ∃ N, ∃ F : PolyMap n N, PolyMap.UniformDegreeBound 5 F :=
-  fun n => ⟨0, Fzero n, Fzero_degree_le_five n⟩
+  fun n => ⟨Fintype.card (MinorIndex n), FminorsRaw n, FminorsRaw_degree_le_five n⟩
 
 end Arxiv.«2602.05192»
