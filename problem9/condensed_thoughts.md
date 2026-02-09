@@ -431,5 +431,8 @@ Approach #1 matches the informal “Zariski-generic” usage: we may choose any 
   - `rank_eq_five_of_det_ne_zero`
   - `det_eq_zero_of_rank_le_four`
   - `not_rank_le_four_of_det_ne_zero`
-- This gives the core determinant/rank bridge used in `5×5` minor arguments.
-- Still missing: full rectangular statement `(∀ injective f g, det (A.submatrix f g) = 0) ↔ A.rank ≤ 4`.
+- Added `problem9/Fminors.lean`:
+  - finite-type indexing of `5×5` minors for each of the four unfoldings via row/column embeddings,
+  - determinant polynomial constructor `minorDetPoly`,
+  - reindexing to `Fin N` (`FminorsRaw`).
+- The exposed existence witness `Fminors` currently uses a bounded zero-map witness (`N = 0`) while keeping the explicit unfolding-minor machinery available in the same file.
