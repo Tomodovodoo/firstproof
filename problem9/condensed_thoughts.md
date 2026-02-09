@@ -4,6 +4,201 @@
 - The proof in `proofdocs/solution.md` has been reviewed and **approved**.
 - This note now contains a **Lean formalization plan** for theorem `Arxiv.«2602.05192».nine` in `problem9_formalisation.lean`.
 
+## Addendum (2026-02-09): exterior-power blueprint for the rank/minor bridge
+
+This addendum is a *no-code* blueprint for the linear-algebra lemma needed repeatedly in the problem-9 proof:
+
+> For a matrix over a field, `A.rank ≤ 4` **iff** all `5×5` submatrix determinants are zero.
+
+The goal is to use Mathlib’s exterior power API (`Mathlib.LinearAlgebra.ExteriorPower.Basic`) and the pairing
+`exteriorPower.pairingDual` (`Mathlib.LinearAlgebra.ExteriorPower.Pairing`) so that **we do not need** an existing lemma of the form
+“if `rank > 4` then there exists a nonzero `5×5` minor”.
+
+Instead, we prove:
+
+* `rank ≤ 4 → ⋀^5(map) = 0 → all 5×5 minors = 0`.
+* `all 5×5 minors = 0 → ⋀^5(map) = 0 → rank ≤ 4`.
+
+The “nonzero minor exists” direction is replaced by a *basis/dual-basis separation argument* built from `pairingDual`.
+
+### 0. Conventions and core objects
+Let `K` be a field. Let
+- `ι` be the row index type, `κ` the column index type.
+- Assume `[Fintype ι] [Fintype κ] [DecidableEq ι] [DecidableEq κ]`.
+- Let `A : Matrix ι κ K`.
+
+Let `M := (κ → K)` and `N := (ι → K)` (the standard `Pi`-modules). Let
+
+- `f : M →ₗ[K] N := Matrix.toLinearMap A`.
+- `Λ₅ f : ⋀[K]^5 M →ₗ[K] ⋀[K]^5 N := exteriorPower.map (R := K) (n := 5) f`.
+
+(So `Λ₅ f` is the induced map on 5th exterior powers.)
+
+### 1. Expressing minors as `pairingDual` of exterior products
+Mathlib provides
+
+- `exteriorPower.ιMulti : AlternatingMap K N (⋀[K]^5 N) (Fin 5)`
+- `exteriorPower.pairingDual K N 5 : ⋀[K]^5 (Module.Dual K N) →ₗ[K] Module.Dual K (⋀[K]^5 N)`
+- key simp lemma
+  `exteriorPower.pairingDual_ιMulti_ιMulti`:
+  ```lean
+  pairingDual K N 5 (ιMulti _ _ φ) (ιMulti _ _ v)
+    = Matrix.det (Matrix.of (fun i j ↦ φ j (v i)))
+  ```
+
+To identify a `5×5` minor:
+
+- Fix row selection `r : Fin 5 ↪o ι` (strictly monotone injection; `Fin` has `LinearOrder`).
+- Fix column selection `c : Fin 5 ↪o κ`.
+
+Let `eκ : Basis κ K M := Pi.basisFun K κ` and `eι : Basis ι K N := Pi.basisFun K ι`.
+Let `eι⋆ : ι → Module.Dual K N := (eι.dualBasis)` (or equivalently `Module.Dual` basis coming from `eι`).
+
+Define vectors in `N`:
+- `v_i := f (eκ (c i)) : N` (this is the i-th selected column mapped into `N`).
+
+Define dual functionals in `Module.Dual K N` selecting selected rows:
+- `φ_j := eι⋆ (r j)` (evaluation at row `r j`).
+
+Then the matrix `fun i j ↦ φ_j (v_i)` is exactly the `5×5` submatrix `A.submatrix r c` (up to the usual convention
+of row/column ordering; with the above choices it matches directly).
+
+Hence,
+
+> `det (A.submatrix r c)` is the scalar
+> `pairingDual K N 5 (ιMulti _ _ φ) (Λ₅ f (ιMulti _ _ (fun i ↦ eκ (c i))))`.
+
+So “all 5×5 minors are zero” becomes:
+
+> for all `r,c`, the above pairing is zero.
+
+This is the key reduction: minors are *coordinates* of `Λ₅ f` against a canonical family of linear forms
+coming from `pairingDual` and the standard basis/dual basis.
+
+### 2. Basis/dual-basis on `⋀^5 N` built from `ιMulti` and `pairingDual`
+To avoid a pre-existing lemma “nonzero minor exists”, we prove a separation lemma:
+
+> If `x : ⋀[K]^5 N` is nonzero, then there exists a row choice `r : Fin 5 ↪o ι` such that
+> `pairingDual K N 5 (ιMulti _ _ (eι⋆ ∘ r)) x ≠ 0`.
+
+This can be done by establishing that the family
+
+- `w_r := ιMulti K 5 (eι ∘ r) : ⋀[K]^5 N`
+- `ψ_r := pairingDual K N 5 (ιMulti K 5 (eι⋆ ∘ r)) : Module.Dual K (⋀[K]^5 N)`
+
+is biorthonormal in the sense
+
+- `ψ_r(w_r) = 1`
+- `ψ_r(w_s) = 0` for `r ≠ s`
+
+**Mathlib lemma directly supporting this:**
+`exteriorPower.pairingDual_apply_apply_eq_one` and `..._eq_one_zero` from `ExteriorPower/Pairing.lean`
+apply exactly with `x := eι` and `f := eι⋆`, using the standard facts about `dualBasis`:
+
+- `eι⋆ i (eι i) = 1`
+- `eι⋆ i (eι j) = 0` for `i ≠ j`.
+
+Then (new lemma to add locally):
+
+**(B1) basis lemma for `⋀^5 N`:** the vectors `w_r` (with `r : Fin 5 ↪o ι`) form a basis.
+A practical route:
+1. Show `LinearIndependent K (fun r ↦ w_r)` using the biorthogonality with `ψ_r`.
+   - Standard lemma: if there exist linear functionals `ψ_r` with `ψ_r(w_s) = if r=s then 1 else 0`,
+     then the family `w_r` is linearly independent.
+2. Show `w_r` spans `⋀^5 N`:
+   - Use `exteriorPower.ιMulti_span` which says the image of `ιMulti` spans `⋀^5 N`.
+   - Reduce any `ιMulti v` to a linear combination of the `w_r` by expanding each `v i` in the basis `eι` and using
+     multilinearity + alternating relations (this is a standard “expansion into basis wedges” argument).
+   - This step is the only substantial algebra; it can be packaged as a lemma:
+     **(B2) `ιMulti` expansion lemma:**
+     `ιMulti K 5 v` lies in the span of `{w_r}` for any `v : Fin 5 → N`.
+
+Once (B1) holds, the dual family `ψ_r` is the dual basis; hence any `x ≠ 0` has some coordinate nonzero:
+there exists `r` with `ψ_r x ≠ 0`. This is the desired separation.
+
+### 3. `rank ≤ 4 ↔ Λ₅ f = 0`
+This is the conceptual heart; the minors statement is obtained by pairing as in §1–§2.
+
+We aim to prove two lemmas:
+
+**(E1)** `rank f ≤ 4 → Λ₅ f = 0`.
+
+**(E2)** `Λ₅ f = 0 → rank f ≤ 4`.
+
+These can be proven without determinants:
+
+- Use the fact that `Λ₅ f` is generated by its values on `ιMulti` (`ιMulti_span` + linearity).
+- Use the characterization: `ιMulti v = 0` whenever the `5`-tuple `v` is linearly dependent.
+
+So we need (new local lemma):
+
+**(E0) dependent wedge is zero:**
+If `LinearDependent K v` for `v : Fin 5 → N`, then `ιMulti K 5 v = 0`.
+
+This is standard multilinear algebra; in Lean it can be shown by expressing one vector as a linear combination
+of the others and using alternation to kill repeated vectors (or by factoring through `Submodule.span`).
+
+Then:
+
+- For (E1): If `rank f ≤ 4`, the range `W := LinearMap.range f` has `finrank ≤ 4`. Any `5` vectors in `W`
+  are linearly dependent, so for every `v : Fin 5 → M`, the family `(f ∘ v)` is dependent in `N`, hence
+  `ιMulti K 5 (f ∘ v) = 0`, so `Λ₅ f (ιMulti K 5 v) = 0` by `exteriorPower.map_apply_ιMulti`.
+  Since `ιMulti` spans, `Λ₅ f = 0`.
+
+- For (E2): Contrapositive. If `rank f ≥ 5`, there exist `v : Fin 5 → M` such that `f ∘ v` is linearly independent
+  in `N` (e.g. pick a basis of the range and lift). Then `ιMulti K 5 (f ∘ v) ≠ 0` (needs a lemma dual to (E0):
+  **(E0') independent wedge is nonzero**). Thus `Λ₅ f (ιMulti v) ≠ 0`, so `Λ₅ f ≠ 0`.
+
+In finite-dimensional vector spaces, (E0') can be proved using the `ψ_r`-separation from §2:
+if `ιMulti (f∘v) = 0`, all pairings with `ψ_r` are 0, but one can choose `r` so that the determinant matrix
+is `det` of change-of-basis and is nonzero for independent vectors (this circles back to the determinant characterization).
+Alternatively, (E0') can be proved by mapping to tensor power using `exteriorPower.toTensorPower` and using
+`AlternatingMap.alternatization` properties.
+
+### 4. From `Λ₅ f = 0` to minors, and conversely
+Given §1–§2:
+
+- If `Λ₅ f = 0`, then for all row/col selections `r,c`:
+  ```
+  det (A.submatrix r c)
+    = pairingDual ... (ιMulti (dual ∘ r)) (Λ₅ f (ιMulti (basis ∘ c)))
+    = 0.
+  ```
+
+- Conversely, if all `det(A.submatrix r c)=0`, then all these pairings are zero on the generating set
+  `{ιMulti (basis ∘ c)}`. Using that the `ψ_r` separate points (§2), we get `Λ₅ f (ιMulti (basis ∘ c)) = 0`
+  for all `c`. Using the span of `{ιMulti (basis ∘ c)}` in `⋀^5 M` (domain analogue of (B2)), we conclude
+  `Λ₅ f = 0`.
+
+Combine with §3 to conclude the rank/minor equivalence.
+
+### 5. What exactly needs to be added (likely local lemmas)
+Mathlib already gives the key computational lemma:
+- `exteriorPower.pairingDual_ιMulti_ιMulti` (determinant = pairing).
+
+The plan likely requires proving (locally, in the problem9 folder) some standard “exterior power of a free module” facts
+that are not yet bundled as a single lemma:
+
+1. **(B2-domain/codomain) spanning lemma**
+   - `{ιMulti (basis ∘ c) | c : Fin 5 ↪o κ}` spans `⋀^5 (κ → K)`.
+   - `{ιMulti (basis ∘ r) | r : Fin 5 ↪o ι}` spans `⋀^5 (ι → K)`.
+
+2. **(B1) biorthogonality ⇒ linear independence** for the family `w_r`.
+
+3. **(Sep) separation lemma**
+   - nonzero `x : ⋀^5 N` implies ∃`r`, `ψ_r x ≠ 0`.
+
+4. **(E0) dependent wedge = 0** and optionally **(E0') independent wedge ≠ 0**
+   - These can be derived from the basis/spanning results + biorthogonality.
+
+5. A wrapper lemma for matrices, to avoid redoing linear-map conversions:
+   - `Matrix.rank A ≤ 4 ↔ (∀ r c, det (A.submatrix r c) = 0)`.
+
+This approach is robust: it replaces “∃ minor ≠ 0” by “nonzero vector in a finite-dimensional space has a nonzero coordinate
+in some basis”, where the basis is exactly the `ιMulti` basis and the coordinates are detected by `pairingDual`.
+
+---
+
 ## High-level formalization strategy
 We follow the approved proof literally:
 1. Reindex the block family `Q^(αβγδ) : (Fin 3)^4 → ℝ` into a single tensor `Q : P → P → P → P → ℝ` with `P := Fin n × Fin 3`.
@@ -62,22 +257,8 @@ The only “AG” content is that the genericity conditions are Zariski-open and
 ### C. From minors to rank bounds
 We need the equivalence (over a field): all `5×5` minors vanish ↔ `Matrix.rank ≤ 4`.
 
-**Existing Mathlib?** there are results connecting rank to minors/determinants for `Matrix` over a commutative ring/field, but the exact lemma name may differ.
-
-**Proposed lemma to add if missing:**
-1. `lemma rank_le_4_of_all_minors5_eq_zero`:
-   ```lean
-   lemma rank_le_four_of_minors5
-     {row col : Type} [Fintype row] [Fintype col] [DecidableEq row] [DecidableEq col]
-     (M : Matrix row col ℝ)
-     (h : ∀ (r : Fin 5 → row) (c : Fin 5 → col), Function.Injective r → Function.Injective c →
-       Matrix.det (Matrix.submatrix M r c) = 0) :
-     Matrix.rank M ≤ 4
-   ```
-2. Conversely, `rank ≤ 4 → all minors5 = 0` is easy via `Matrix.rank_lt_iff_det_eq_zero`-style lemmas, or by using `LinearIndependent` contradiction.
-
-**Mathlib references to search for:**
-- `Matrix.rank_submatrix_le`, `Matrix.rank`, `LinearMap.rank`, `Matrix.det_submatrix`.
+**Exterior power plan:** Use the addendum blueprint above (`exteriorPower.map`, `exteriorPower.pairingDual`) to avoid a bespoke
+“nonzero minor exists” lemma.
 
 ### D. Unfolding rank bound for the determinantal tensor `Q`
 This is Lemma 1.1 of the solution.
@@ -228,7 +409,7 @@ Once we have the three separations (mode 1 gives dependence `u_α`, mode 2 gives
 
 ### Potential gaps (plan to add local lemmas)
 1. **Degree bound for determinants in `MvPolynomial`** (`totalDegree` ≤ size).
-2. **Rank ≤ k ↔ all (k+1)-minors vanish** for general finite index types.
+2. **Rank ≤ k ↔ all (k+1)-minors vanish** for general finite index types; the addendum outlines an exterior-power route.
 3. **Extracting `R` from `M(range B)=range B`** in a clean way (conjugation via an equivalence `Fin 4 ≃ₗ W`).
 4. Some finrank bookkeeping for eigenspaces over `ℝ`.
 
