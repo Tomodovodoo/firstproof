@@ -244,3 +244,11 @@ Two acceptable approaches (recommend #1):
 2. Keep current `ZariskiGeneric`, but prove a lemma `ZariskiGeneric A → (rank(B)=4 ∧ G3_m …)`; this is less realistic because it requires deriving very specific genericity consequences from an arbitrary open condition.
 
 Approach #1 matches the informal “Zariski-generic” usage: we may choose any nonempty Zariski-open condition sufficient for the argument.
+
+## 2026-02-09 implementation update
+- Added `problem9/solution.lean` with proved lemmas for `5×5` square matrices over a field:
+  - `rank_eq_five_of_det_ne_zero`
+  - `det_eq_zero_of_rank_le_four`
+  - `not_rank_le_four_of_det_ne_zero`
+- This gives the core determinant/rank bridge used in `5×5` minor arguments.
+- Still missing: full rectangular statement `(∀ injective f g, det (A.submatrix f g) = 0) ↔ A.rank ≤ 4`.
