@@ -136,10 +136,11 @@ theorem nine :
               evalCameraPolynomial G A ≠ 0 →
               ∀ (lam : Lambda n),
                 (∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ) →
-                IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
-                  (∃ (u v w x : Fin n → ℝˣ),
-                    ∀ α β γ δ, NotIdentical α β γ δ →
-                      lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ)) := by
+                  (IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
+                    (∃ (u v w x : Fin n → ℝˣ),
+                      ∀ α β γ δ, NotIdentical α β γ δ →
+                        lam α β γ δ =
+                          (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
   sorry
 
 end Arxiv.«2602.05192»
