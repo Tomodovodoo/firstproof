@@ -8,14 +8,21 @@ scalings of determinantal tensors from cameras.
 
 import Mathlib
 
+
 set_option maxHeartbeats 3200000
+
 set_option maxRecDepth 4000
+
 set_option linter.mathlibStandardSet false
+
 set_option linter.unnecessarySimpa false
+
 set_option linter.unusedSimpArgs false
+
 set_option linter.unnecessarySeqFocus false
 
 open scoped BigOperators
+
 open Classical Matrix
 
 noncomputable section
@@ -27,8 +34,11 @@ namespace Arxiv.«2602.05192»
 -- ═══════════════════════════════════════════════════════════════
 
 abbrev Matrix3x4 := Matrix (Fin 3) (Fin 4) ℝ
+
 abbrev Tensor3333 := Fin 3 → Fin 3 → Fin 3 → Fin 3 → ℝ
+
 abbrev QFamily (n : ℕ) := Fin n → Fin n → Fin n → Fin n → Tensor3333
+
 abbrev Lambda (n : ℕ) := Fin n → Fin n → Fin n → Fin n → ℝ
 
 def NotIdentical {n : ℕ} (α β γ δ : Fin n) : Prop := ¬ (α = β ∧ β = γ ∧ γ = δ)
@@ -83,6 +93,7 @@ def evalCameraPolynomial {n : ℕ} (p : MvPolynomial (AIndex n) ℝ)
 -- ═══════════════════════════════════════════════════════════════
 
 abbrev RowIdx (n : ℕ) := Fin n × Fin 3
+
 abbrev ColIdx (n : ℕ) := RowIdx n × RowIdx n × RowIdx n
 
 def modeQIdx {n : ℕ} (m : Fin 4) (row : RowIdx n) (col : ColIdx n) : QIndex n :=
@@ -538,71 +549,73 @@ lemma forward_direction {n : ℕ} (A : Fin n → Matrix3x4) (lam : Lambda n)
 -- ═══════════════════════════════════════════════════════════════
 
 
--- TODO: converse to `rank_le_four_imp_5x5_det_zero`.
--- If all 5×5 minors vanish, then the matrix rank is ≤ 4.
-/- PROVIDED SOLUTION:
 
-Goal:
-  If every `5×5` minor of a real matrix `M : Matrix α β ℝ` is zero, then `rank M ≤ 4`.
+noncomputable section AristotleLemmas
 
-Standard linear algebra fact (over a field):
-  `rank M` is the largest integer `k` such that some `k×k` minor of `M` is nonzero.
-In particular:
-  `rank M ≥ 5`  ⇔  ∃ rows cols, det (M.submatrix rows cols) ≠ 0 for some `rows : Fin 5 → α`,
-                    `cols : Fin 5 → β`.
-So the contrapositive of the theorem is:
-  if `rank M ≥ 5` then some `5×5` minor is nonzero.
-
-Proof idea for the contrapositive:
-1) View `M` as a linear map `ℝ^β → ℝ^α` via `mulVecLin`.
-   Then `rank M = dim(im(M)) = dim(span(columns of M))`.
-2) If `rank M ≥ 5`, then the column span contains 5 linearly independent vectors.
-   Concretely, one can pick 5 columns of `M` that are linearly independent; equivalently,
-   there exists a submatrix `S` consisting of 5 columns of `M` with `rank S = 5`.
-3) A matrix with 5 columns has rank 5 iff its columns are linearly independent, i.e. the linear map
-   `ℝ^5 → ℝ^α` defined by `S` is injective.
-4) Injectivity forces the existence of 5 coordinate functionals (i.e. a choice of 5 rows) such that
-   the composite `ℝ^5 → ℝ^α → ℝ^5` is an isomorphism. In matrix terms, selecting those 5 rows gives
-   a square `5×5` submatrix `S'` with `det S' ≠ 0`.
-   (Geometrically: if the image is 5D, some 5 coordinates restrict to a basis.)
-5) Since `S` is a column-submatrix of `M`, any `5×5` minor of `S` is also a `5×5` minor of `M`
-   (for the same row selection and the chosen 5 columns).
-   Hence `M` has a `5×5` minor with nonzero determinant.
-
-Therefore, if *all* `5×5` minors of `M` vanish, `rank M` cannot be ≥ 5, so `rank M ≤ 4`.
-
-Remarks on formalization strategy (Lean/mathlib):
-  One can implement step (4) by working with `im(M)` as a finite-dimensional subspace of `(α → ℝ)`,
-  choosing a basis of `im(M)` and then using the existence of a set of 5 coordinates on `(α → ℝ)`
-  that makes the coordinate map injective on that 5D subspace, yielding an invertible `5×5` matrix.
-  This is the only genuinely nontrivial linear-algebra bridge needed here.
+/-
+If the rank of a matrix M is at least n, then there exist n columns of M that are linearly independent.
 -/
--- If the rows of a square matrix over `ℝ` are linearly independent, then its determinant is nonzero.
--- We use this for extracting a nonzero minor from full rank via a row selection argument.
-lemma det_ne_zero_of_linearIndependent_rows {n : Type} [Fintype n] [DecidableEq n]
-    (A : Matrix n n ℝ) (h : LinearIndependent ℝ (fun i : n => A i)) : A.det ≠ 0 := by
-  classical
-  -- Row-independence is injectivity of right multiplication `v ↦ v ᵥ* A`.
-  have hinj : Function.Injective fun v : n → ℝ => v ᵥ* A :=
-    (Matrix.vecMul_injective_iff (R := ℝ) (M := A)).2 (by simpa [Matrix.row] using h)
-  -- In finite dimension, injective endomorphisms are surjective.
-  have hsurj : Function.Surjective fun v : n → ℝ => v ᵥ* A := by
-    let f : (n → ℝ) →ₗ[ℝ] (n → ℝ) := Matrix.vecMulLinear (M := A)
-    have hf_inj : Function.Injective (f : (n → ℝ) → (n → ℝ)) := by
-      simpa [f, Matrix.vecMulLinear_apply] using hinj
-    have hf_surj : Function.Surjective (f : (n → ℝ) → (n → ℝ)) :=
-      (LinearMap.injective_iff_surjective (f := f)).1 hf_inj
-    simpa [f, Matrix.vecMulLinear_apply] using hf_surj
-  -- Build an explicit left inverse matrix `B` by choosing preimages of basis vectors.
-  choose preimage hpreimage using fun j : n => hsurj (Pi.single j 1)
-  let B : Matrix n n ℝ := fun i j => preimage i j
-  have hBA : B * A = 1 := by
-    ext i j
-    have hij := congrArg (fun v => v j) (hpreimage i)
-    -- Unfold `vecMul` as a finite sum; this is exactly matrix multiplication by rows.
-    simpa [B, Matrix.vecMul, dotProduct, Matrix.one_apply, Pi.single_apply, Matrix.mul_apply,
-      eq_comm] using hij
-  exact Matrix.det_ne_zero_of_left_inverse (A := A) (B := B) hBA
+lemma exists_linearIndependent_cols_of_rank_ge {α β : Type*} [Fintype α] [Fintype β]
+    [DecidableEq α] [DecidableEq β]
+    (M : Matrix α β ℝ) (n : ℕ) (h : n ≤ M.rank) :
+    ∃ (cols : Fin n → β), LinearIndependent ℝ (fun i => M.col (cols i)) := by
+      -- Apply the theorem that states if the rank of a matrix is at least n, then there exist n linearly independent columns.
+      have h_lin_ind : ∃ (cols : Fin n → β), LinearIndependent ℝ (fun i => M.col (cols i)) := by
+        have h_card : n ≤ Module.finrank ℝ (Submodule.span ℝ (Set.range (Matrix.col M))) := by
+          convert h using 1;
+          exact Eq.symm (rank_eq_finrank_span_cols M)
+        have := exists_linearIndependent ℝ ( Set.range ( Matrix.col M ) );
+        rcases this with ⟨ b, hb₁, hb₂, hb₃ ⟩ ; have := hb₃.cardinal_le_rank; simp_all +decide [ Module.finrank ] ;
+        -- Since $b$ is a subset of the range of $M.col$, we can choose $n$ elements from $b$.
+        obtain ⟨cols, hcols⟩ : ∃ cols : Fin n → α → ℝ, (∀ i, cols i ∈ b) ∧ LinearIndependent ℝ cols := by
+          have h_card : n ≤ Cardinal.toNat (Cardinal.mk b) := by
+            refine' le_trans h_card _;
+            rw [ ← hb₂, rank_span_set ] ; aesop;
+          have h_card : ∃ cols : Fin (Cardinal.toNat (Cardinal.mk b)) → α → ℝ, (∀ i, cols i ∈ b) ∧ LinearIndependent ℝ cols := by
+            have h_card : Nonempty (Fin (Cardinal.toNat (Cardinal.mk b)) ≃ b) := by
+              have h_card : Fintype b := by
+                exact Set.Finite.fintype ( Set.Finite.subset ( Set.toFinite ( Set.range M.col ) ) hb₁ );
+              exact ⟨ Fintype.equivOfCardEq <| by simp +decide [ Cardinal.toNat_eq_iff ] ⟩;
+            obtain ⟨ e ⟩ := h_card;
+            exact ⟨ _, fun i => e i |>.2, hb₃.comp _ e.injective ⟩;
+          obtain ⟨ cols, hcols₁, hcols₂ ⟩ := h_card; exact ⟨ fun i => cols ⟨ i, by linarith [ Fin.is_lt i ] ⟩, fun i => hcols₁ _, hcols₂.comp _ fun i j hij => by simpa [ Fin.ext_iff ] using hij ⟩ ;
+        choose f hf using fun i => hb₁ ( hcols.1 i ) ; use f; aesop;
+      exact h_lin_ind
+
+/-
+If the rank of a matrix M is at least n, then there exists an n x n submatrix of M with non-zero determinant.
+-/
+lemma exists_submatrix_det_ne_zero_of_rank_ge {α β : Type*} [Fintype α] [Fintype β]
+    [DecidableEq α] [DecidableEq β]
+    (M : Matrix α β ℝ) (n : ℕ) (h : n ≤ M.rank) :
+    ∃ (rows : Fin n → α) (cols : Fin n → β), (M.submatrix rows cols).det ≠ 0 := by
+      -- Since `n ≤ M.rank`, by `exists_linearIndependent_cols_of_rank_ge`, there exist `cols : Fin n → β` such that the columns of `M` indexed by `cols` are linearly independent.
+      obtain ⟨cols, hcols⟩ : ∃ cols : Fin n → β, LinearIndependent ℝ (fun i => M.col (cols i)) := exists_linearIndependent_cols_of_rank_ge M n h;
+      -- Let `S = M.submatrix id cols`. `S` is an `α × n` matrix.
+      set S : Matrix α (Fin n) ℝ := fun i j => M i (cols j);
+      -- The columns of `S` are linearly independent, so `S.rank = n`.
+      have hS_rank : S.rank = n := by
+        have hS_rank : LinearMap.range (Matrix.mulVecLin S) = Submodule.span ℝ (Set.range (fun i => M.col (cols i))) := by
+          ext; simp [S];
+          simp +decide [ funext_iff, Matrix.mulVec, Submodule.mem_span_range_iff_exists_fun ];
+          simp +decide only [dotProduct, mul_comm];
+        rw [ Matrix.rank ];
+        rw [ hS_rank, finrank_span_eq_card ] <;> aesop;
+      -- We know `S.rank = Sᵀ.rank`, so `Sᵀ.rank = n`. `Sᵀ` is an `n × α` matrix.
+      have hS_transpose_rank : (Matrix.transpose S).rank = n := by
+        rw [ Matrix.rank_transpose, hS_rank ];
+      -- Applying `exists_linearIndependent_cols_of_rank_ge` to `Sᵀ` (with `n` and `h' : n ≤ Sᵀ.rank`), we find `rows : Fin n → α` such that the columns of `Sᵀ` indexed by `rows` are linearly independent.
+      obtain ⟨rows, hrows⟩ : ∃ rows : Fin n → α, LinearIndependent ℝ (fun i => (Matrix.transpose S).col (rows i)) := by
+        apply exists_linearIndependent_cols_of_rank_ge;
+        rw [hS_transpose_rank];
+      refine' ⟨ rows, cols, _ ⟩;
+      rw [ Fintype.linearIndependent_iff ] at hrows;
+      contrapose! hrows;
+      obtain ⟨ g, hg ⟩ := Matrix.exists_vecMul_eq_zero_iff.mpr hrows;
+      refine' ⟨ g, _, _ ⟩ <;> simp_all +decide [ funext_iff, Matrix.vecMul, dotProduct ];
+      exact hg.2
+
+end AristotleLemmas
 
 theorem minors5x5_zero_imp_rank_le_four {α β : Type*} [Fintype α] [Fintype β]
     [DecidableEq α] [DecidableEq β]
@@ -611,104 +624,11 @@ theorem minors5x5_zero_imp_rank_le_four {α β : Type*} [Fintype α] [Fintype β
       (M.submatrix rows cols).det = 0) :
     M.rank ≤ 4 := by
   classical
-  by_contra hle
-  have hrank : 5 ≤ M.rank := Nat.succ_le_of_lt (Nat.lt_of_not_ge hle)
-  -- Extract a linearly independent family of columns of size `rank M` (and hence at least 5).
-  rcases exists_linearIndependent' ℝ (M.col) with ⟨κ, a, ha_inj, hspan, hLI⟩
-  haveI : Finite κ := by
-    classical
-    exact LinearIndependent.finite (R := ℝ) (M := (α → ℝ)) (f := M.col ∘ a) hLI
-  classical
-  letI : Fintype κ := Fintype.ofFinite κ
-  have hcardκ : Fintype.card κ = M.rank := by
-    have hcard :
-        Fintype.card κ = (Set.range (M.col ∘ a)).finrank ℝ :=
-      (linearIndependent_iff_card_eq_finrank_span (K := ℝ) (b := M.col ∘ a)).1 hLI
-    calc
-      Fintype.card κ = (Set.range (M.col ∘ a)).finrank ℝ := hcard
-      _ = (Set.range M.col).finrank ℝ := by
-        -- `Set.finrank` is `finrank` of the spanned submodule; use the span equality.
-        -- Rewriting types via equality needs an explicit `LinearEquiv`.
-        simpa [Set.finrank] using
-          (LinearEquiv.finrank_eq (LinearEquiv.ofEq
-            (Submodule.span ℝ (Set.range (M.col ∘ a)))
-            (Submodule.span ℝ (Set.range M.col)) hspan))
-      _ = M.rank := by
-        simpa [Set.finrank] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := M)).symm
-  have h5κ : 5 ≤ Fintype.card κ := by simpa [hcardκ] using hrank
-
-  -- Choose 5 distinct indices in `κ`, hence 5 distinct columns in `β`.
-  let embκ : Fin 5 ↪ κ :=
-    (Fin.castLEEmb h5κ).trans (Fintype.equivFin κ).symm.toEmbedding
-  let cols : Fin 5 → β := fun i => a (embκ i)
-  have hLIcols : LinearIndependent ℝ (fun i : Fin 5 => M.col (cols i)) := by
-    have hsub : LinearIndependent ℝ (fun i : Fin 5 => (M.col ∘ a) (embκ i)) :=
-      hLI.comp embκ embκ.injective
-    simpa [cols, Function.comp] using hsub
-
-  -- Form the 5-column submatrix.
-  let S : Matrix α (Fin 5) ℝ := M.submatrix id cols
-  have hLIcolsS : LinearIndependent ℝ S.col := by
-    have hcol : S.col = fun i : Fin 5 => M.col (cols i) := by
-      funext i
-      ext r
-      rfl
-    simpa [hcol] using hLIcols
-
-  -- The submatrix `S` has rank 5.
-  have hrankS : S.rank = 5 := by
-    have hrowsT : LinearIndependent ℝ (Sᵀ.row) := by
-      have hrow : (Sᵀ.row) = S.col := by
-        funext i
-        ext j
-        rfl
-      simpa [hrow] using hLIcolsS
-    have hrT : Sᵀ.rank = Fintype.card (Fin 5) :=
-      (LinearIndependent.rank_matrix (R := ℝ) (M := Sᵀ) hrowsT)
-    simpa [Fintype.card_fin, Matrix.rank_transpose (R := ℝ) (A := S)] using hrT
-
-  -- Extract 5 linearly independent rows of `S`; their square submatrix has nonzero determinant.
-  rcases exists_linearIndependent' ℝ (S.row) with ⟨ι, r, hr_inj, hr_span, hr_LI⟩
-  haveI : Finite ι := by
-    classical
-    exact LinearIndependent.finite (R := ℝ) (M := (Fin 5 → ℝ)) (f := S.row ∘ r) hr_LI
-  classical
-  letI : Fintype ι := Fintype.ofFinite ι
-  have hcardι : Fintype.card ι = 5 := by
-    have hcard :
-        Fintype.card ι = (Set.range (S.row ∘ r)).finrank ℝ :=
-      (linearIndependent_iff_card_eq_finrank_span (K := ℝ) (b := S.row ∘ r)).1 hr_LI
-    calc
-      Fintype.card ι = (Set.range (S.row ∘ r)).finrank ℝ := hcard
-      _ = (Set.range S.row).finrank ℝ := by
-        simpa [Set.finrank] using
-          (LinearEquiv.finrank_eq (LinearEquiv.ofEq
-            (Submodule.span ℝ (Set.range (S.row ∘ r)))
-            (Submodule.span ℝ (Set.range S.row)) hr_span))
-      _ = S.rank := by
-        simpa [Set.finrank] using (Matrix.rank_eq_finrank_span_row (R := ℝ) (A := S)).symm
-      _ = 5 := hrankS
-
-  -- Enumerate the independent rows.
-  let eι : ι ≃ Fin 5 :=
-    (Fintype.equivFin ι).trans (Equiv.cast (congrArg Fin hcardι))
-  let rows : Fin 5 → α := fun i => r (eι.symm i)
-  have hrowsLI : LinearIndependent ℝ (fun i : Fin 5 => (S.submatrix rows id) i) := by
-    have hroweq : ∀ i : Fin 5, (S.submatrix rows id) i = S.row (rows i) := by
-      intro i
-      ext j
-      rfl
-    have hsub : LinearIndependent ℝ (fun i : Fin 5 => (S.row ∘ r) (eι.symm i)) :=
-      hr_LI.comp eι.symm eι.symm.injective
-    simpa [rows, Function.comp, hroweq] using hsub
-
-  have hdet : (S.submatrix rows id).det ≠ 0 :=
-    det_ne_zero_of_linearIndependent_rows (A := S.submatrix rows id) hrowsLI
-
-  -- This determinant is also a 5×5 minor of `M`.
-  have : (M.submatrix rows cols).det ≠ 0 := by
-    simpa [S, Matrix.submatrix_submatrix] using hdet
-  exact this (by simpa using hminors rows cols)
+  by_contra hminors;
+  -- By the lemma `exists_submatrix_det_ne_zero_of_rank_ge`, there exist row indices `rows : Fin 5 → α` and column indices `cols : Fin 5 → β` such that `(M.submatrix rows cols).det ≠ 0`.
+  obtain ⟨rows, cols, h_det⟩ : ∃ (rows : Fin 5 → α) (cols : Fin 5 → β), (M.submatrix rows cols).det ≠ 0 := by
+    convert exists_submatrix_det_ne_zero_of_rank_ge M 5 ( by linarith ) using 1;
+  exact h_det ( by solve_by_elim )
 
 -- TODO: convenient wrapper for “column span” of a matrix, used heavily in the reverse direction.
 def ColSpan {m n : Type*} [Fintype m] [Fintype n] (M : Matrix m n ℝ) : Submodule ℝ (m → ℝ) :=
@@ -753,324 +673,311 @@ theorem colSpan_eq_of_cols_subtype_and_rank {m k l : Type*}
   -- same finrank + inclusion gives equality
   exact Submodule.eq_of_le_of_finrank_eq hle (by simpa [hfinS, hfinM])
 
--- Generic camera properties needed for the reverse direction.
---
--- We encode the paper's “generic spanning” conditions by requiring that for each not-all-equal
--- triple of camera indices, the corresponding `3n×27` submatrix of the appropriate unfolding of
--- `constructQ A` has rank `4`.
+
+/- `NotAllEqual3 β γ δ` means the triple `(β,γ,δ)` is not constant. This is the condition under which
+`NotIdentical α β γ δ` holds for *every* `α`. -/
+def NotAllEqual3 {n : ℕ} (a b c : Fin n) : Prop := ¬ (a = b ∧ b = c)
+
+/-- The 27-column index type (j,k,ℓ ∈ Fin 3). -/
 abbrev Triple3 := Fin 3 × Fin 3 × Fin 3
 
-def NotAllEqual3 {n : ℕ} (x y z : Fin n) : Prop := ¬ (x = y ∧ y = z)
+/-- Column index in `ColIdx n` for a fixed triple of cameras `(a,b,c)` and row choices `(j,k,ℓ)`. -/
+def colIdxOfTriple {n : ℕ} (a b c : Fin n) (t : Triple3) : ColIdx n :=
+  ((a, t.1), ((b, t.2.1), (c, t.2.2)))
 
-def colFun0 {n : ℕ} (β γ δ : Fin n) : Triple3 → ColIdx n :=
-  fun t => ((β, t.1), ((γ, t.2.1), (δ, t.2.2)))
-
-def colFun1 {n : ℕ} (α γ δ : Fin n) : Triple3 → ColIdx n :=
-  fun t => ((α, t.1), ((γ, t.2.1), (δ, t.2.2)))
-
-def colFun2 {n : ℕ} (α β δ : Fin n) : Triple3 → ColIdx n :=
-  fun t => ((α, t.1), ((β, t.2.1), (δ, t.2.2)))
-
-noncomputable def Submatrix1 {n : ℕ} (A : Fin n → Matrix3x4) (β γ δ : Fin n) :
+/--
+The `3n × 27` submatrix of the mode-`m` unfolding obtained by fixing the *camera indices*
+for the three column-slots to `(a,b,c)` and varying the within-camera row indices `(j,k,ℓ)`.
+-/
+def Submatrix27 {n : ℕ} (A : Fin n → Matrix3x4) (m : Fin 4) (a b c : Fin n) :
     Matrix (RowIdx n) Triple3 ℝ :=
-  (Unfold 0 (constructQ A)).submatrix id (colFun0 β γ δ)
+  fun row t => (Unfold m (constructQ A)) row (colIdxOfTriple a b c t)
 
-noncomputable def Submatrix2 {n : ℕ} (A : Fin n → Matrix3x4) (α γ δ : Fin n) :
-    Matrix (RowIdx n) Triple3 ℝ :=
-  (Unfold 1 (constructQ A)).submatrix id (colFun1 α γ δ)
+/-- The 4D subspace `W = col(StackedMat A)` from `solution.md`. -/
+def Wspace {n : ℕ} (A : Fin n → Matrix3x4) : Submodule ℝ (RowIdx n → ℝ) :=
+  ColSpan (StackedMat A)
 
-noncomputable def Submatrix3 {n : ℕ} (A : Fin n → Matrix3x4) (α β δ : Fin n) :
-    Matrix (RowIdx n) Triple3 ℝ :=
-  (Unfold 2 (constructQ A)).submatrix id (colFun2 α β δ)
+/--
+(G3_m) from `solution.md`:
+for each mode `m` and each triple of camera indices `(a,b,c)` not all equal,
+the corresponding 27 columns span `W = col(StackedMat A)`.
+-/
+def G3 {n : ℕ} (A : Fin n → Matrix3x4) (m : Fin 4) : Prop :=
+  ∀ a b c : Fin n, NotAllEqual3 a b c →
+    ColSpan (Submatrix27 A m a b c) = Wspace A
 
+/--
+Block-scalar diagonal linear map on `ℝ^(3n)`:
+multiply every row in camera-block `α` by the scalar `s α`.
+This is the `diag(s₁ I₃, …, sₙ I₃)` action from Lemma 4.2 in `solution.md`.
+-/
+def blockScalarLM {n : ℕ} (s : Fin n → ℝ) : (RowIdx n → ℝ) →ₗ[ℝ] (RowIdx n → ℝ) :=
+{ toFun := fun v p => s p.1 * v p
+  map_add' := by
+    intro v w; ext p; simp [mul_add]
+  map_smul' := by
+    intro r v; ext p
+    -- in `RowIdx n → ℝ`, `(r • v) p = r * v p`
+    simp [mul_assoc, mul_left_comm, mul_comm] }
+
+/--
+Rigidity assumption (Lemma 4.2 in `solution.md`), packaged as a Prop:
+any block-scalar diagonal map stabilizing `W` must be constant across blocks.
+(You can later *prove* this from rank assumptions if you want, but for the reverse direction
+it’s fine to include it as part of “generic”.)
+-/
+def RigidBlockScalarStabilizer {n : ℕ} (A : Fin n → Matrix3x4) : Prop :=
+  ∀ s : Fin n → ℝˣ,
+    (Wspace A).map (blockScalarLM (fun α => (s α : ℝ))) = (Wspace A) →
+      ∀ α β : Fin n, s α = s β
+
+/--
+“Generic cameras” as needed by the reverse direction in `solution.md`:
+- stacked rank = 4
+- each camera rank = 3
+- spanning conditions (G3_m) for all modes
+-/
 def GenericCameras {n : ℕ} (A : Fin n → Matrix3x4) : Prop :=
   (StackedMat A).rank = 4 ∧
   (∀ α : Fin n, (A α).rank = 3) ∧
-  (∀ β γ δ : Fin n, NotAllEqual3 β γ δ → (Submatrix1 A β γ δ).rank = 4) ∧
-  (∀ α γ δ : Fin n, NotAllEqual3 α γ δ → (Submatrix2 A α γ δ).rank = 4) ∧
-  (∀ α β δ : Fin n, NotAllEqual3 α β δ → (Submatrix3 A α β δ).rank = 4)
+  (∀ m : Fin 4, G3 A m)
 
--- Block-diagonal (block-scalar) matrices acting on `RowIdx n` by scaling each camera block.
-noncomputable def BlockDiagonal {n : ℕ} (s : Fin n → ℝ) : Matrix (RowIdx n) (RowIdx n) ℝ :=
-  Matrix.diagonal (fun p : RowIdx n => s p.1)
+/-!
+Lemma 4.2 from `proofdocs/solution.md`:
+the block-scalar stabilizer of `W = col(StackedMat A)` is rigid under the rank assumptions.
+-/
 
-lemma BlockDiagonal_mul_apply {n : ℕ} (s : Fin n → ℝ) (M : Matrix (RowIdx n) α ℝ) (p : RowIdx n)
-    (j : α) :
-    (BlockDiagonal s * M) p j = s p.1 * M p j := by
+lemma rigidBlockScalarStabilizer_of_rank {n : ℕ} (A : Fin n → Matrix3x4)
+    (hstack : (StackedMat A).rank = 4) (hcam : ∀ α : Fin n, (A α).rank = 3) :
+    RigidBlockScalarStabilizer A := by
   classical
-  -- Multiplying by a diagonal matrix scales rows.
-  simp [BlockDiagonal, Matrix.mul_apply, Matrix.diagonal, Finset.mul_sum, Finset.sum_mul,
-    Finset.sum_ite_eq', Finset.filter_eq', Finset.filter_ne', mul_assoc, mul_comm, mul_left_comm]
+  intro s hsW α β
+  -- Setup notation.
+  let B : Matrix (RowIdx n) (Fin 4) ℝ := StackedMat A
+  let M : (RowIdx n → ℝ) →ₗ[ℝ] (RowIdx n → ℝ) :=
+    blockScalarLM (n := n) (fun a => (s a : ℝ))
 
-lemma BlockDiagonal_det_ne_zero {n : ℕ} (s : Fin n → ℝ) (hs : ∀ i : Fin n, s i ≠ 0) :
-    (BlockDiagonal s).det ≠ 0 := by
-  classical
-  -- Determinant of a diagonal matrix is the product of its diagonal entries.
-  simp [BlockDiagonal, Matrix.det_diagonal, hs, Finset.prod_ne_zero_iff]
+  have hWrange : (Wspace A) = LinearMap.range B.mulVecLin := by
+    -- `Wspace A` is the column span of `B`.
+    simp [Wspace, ColSpan, B, Matrix.range_mulVecLin]
 
-lemma BlockDiagonal_isUnit_det {n : ℕ} (s : Fin n → ℝ) (hs : ∀ i : Fin n, s i ≠ 0) :
-    IsUnit (BlockDiagonal s).det := by
-  simpa [isUnit_iff_ne_zero] using BlockDiagonal_det_ne_zero (n := n) s hs
+  -- `B.mulVecLin` is injective because it has rank 4 and its domain has dimension 4.
+  have h_finrank_range : Module.finrank ℝ ↥(LinearMap.range B.mulVecLin) = 4 := by
+    have hspan :
+        B.rank = Module.finrank ℝ ↥(Submodule.span ℝ (Set.range B.col)) := by
+      simpa using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := B))
+    have hrange : B.rank = Module.finrank ℝ ↥(LinearMap.range B.mulVecLin) := by
+      -- rewrite the span-of-cols as the `mulVecLin` range
+      calc
+        B.rank = Module.finrank ℝ ↥(Submodule.span ℝ (Set.range B.col)) := hspan
+        _ = Module.finrank ℝ ↥(LinearMap.range B.mulVecLin) := by
+          -- rewrite by `Matrix.range_mulVecLin` (in the reverse direction)
+          have e :
+              Submodule.span ℝ (Set.range B.col) = LinearMap.range B.mulVecLin :=
+            (Matrix.range_mulVecLin (M := B)).symm
+          -- rewriting under the coercion `↥(Submodule ...)` works with `rw`.
+          rw [e]
+    have : Module.finrank ℝ ↥(LinearMap.range B.mulVecLin) = B.rank := by
+      simpa using hrange.symm
+    simpa [hstack, B] using this
 
--- Column span of a left product.
-lemma ColSpan_mul_left {m n : Type*} [Fintype m] [Fintype n] [DecidableEq m]
-    (D : Matrix m m ℝ) (M : Matrix m n ℝ) :
-    ColSpan (D * M) = Submodule.map (Matrix.mulVecLin D) (ColSpan M) := by
-  classical
-  unfold ColSpan
-  -- `map_span` turns `map` of a span into a span of the image; reduce to a range equality.
-  rw [Submodule.map_span]
-  congr 1
-  ext v
-  constructor
-  · rintro ⟨j, rfl⟩
-    refine ⟨M.col j, ?_, ?_⟩
-    · exact ⟨j, rfl⟩
-    · -- `D.mulVecLin` sends a column to the corresponding column of the product.
-      ext i
-      simp [Matrix.mulVecLin_apply, Matrix.mulVec, Matrix.col, Matrix.mul_apply, dotProduct]
-  · rintro ⟨v, ⟨j, rfl⟩, rfl⟩
-    refine ⟨j, ?_⟩
-    ext i
-    simp [Matrix.mulVecLin_apply, Matrix.mulVec, Matrix.col, Matrix.mul_apply, dotProduct]
+  have h_ker : LinearMap.ker B.mulVecLin = ⊥ := by
+    have hdom : Module.finrank ℝ (Fin 4 → ℝ) = 4 := by
+      simp [Module.finrank_pi, Fintype.card_fin]
+    have hsum :=
+      (LinearMap.finrank_range_add_finrank_ker (B.mulVecLin : (Fin 4 → ℝ) →ₗ[ℝ] (RowIdx n → ℝ)))
+    have hsum' :
+        Module.finrank ℝ ↥(LinearMap.range B.mulVecLin) +
+          Module.finrank ℝ ↥(LinearMap.ker B.mulVecLin) = 4 := by
+      simpa [hdom] using hsum
+    have hker_finrank : Module.finrank ℝ ↥(LinearMap.ker B.mulVecLin) = 0 := by
+      have : 4 + Module.finrank ℝ ↥(LinearMap.ker B.mulVecLin) = 4 := by
+        simpa [h_finrank_range] using hsum'
+      exact Nat.add_left_cancel this
+    exact (Submodule.finrank_eq_zero).1 hker_finrank
 
--- Column span inclusion for a general product `B * C`.
-lemma ColSpan_mul_le_left {m n p : Type*} [Fintype m] [Fintype n] [Fintype p]
-    [DecidableEq m] [DecidableEq n] [DecidableEq p]
-    (B : Matrix m n ℝ) (C : Matrix n p ℝ) :
-    ColSpan (B * C) ≤ ColSpan B := by
-  classical
-  refine Submodule.span_le.2 ?_
-  rintro _ ⟨j, rfl⟩
-  have hrange :
-      LinearMap.range B.mulVecLin = ColSpan B := by
-    simpa [ColSpan] using (Matrix.range_mulVecLin (A := B))
-  have : (B * C).col j ∈ LinearMap.range B.mulVecLin := by
-    refine ⟨C.col j, ?_⟩
-    ext i
-    simp [Matrix.mulVecLin_apply, Matrix.mulVec, Matrix.col, Matrix.mul_apply, dotProduct]
-  simpa [hrange] using this
+  obtain ⟨g, hg⟩ :=
+    LinearMap.exists_leftInverse_of_injective (f := B.mulVecLin) h_ker
 
--- A triple not all equal ensures the corresponding λ-slices are nowhere zero in the remaining index.
-lemma notIdentical_of_notAllEqual3₀ {n : ℕ} {β γ δ : Fin n} (h : NotAllEqual3 β γ δ) :
-    ∀ α : Fin n, NotIdentical α β γ δ := by
-  intro α
-  intro hall
-  apply h
-  exact ⟨hall.2.1, hall.2.2⟩
+  -- `M` stabilizes `W = col(B)`, hence maps `range(B.mulVecLin)` to itself.
+  have hM_mem_range : ∀ x : Fin 4 → ℝ, M (B.mulVecLin x) ∈ LinearMap.range B.mulVecLin := by
+    intro x
+    -- First, show `M` maps `Wspace A` into itself.
+    have hmap : (Wspace A).map M ≤ Wspace A := le_of_eq hsW
+    have hxW : B.mulVecLin x ∈ Wspace A := by
+      have hx : B.mulVecLin x ∈ LinearMap.range B.mulVecLin := ⟨x, rfl⟩
+      simpa [hWrange] using hx
+    have hMxW : M (B.mulVecLin x) ∈ Wspace A := by
+      -- `M (B.mulVecLin x)` is in `map M (Wspace A)` by construction.
+      have : M (B.mulVecLin x) ∈ (Wspace A).map M := by
+        refine (Submodule.mem_map).2 ?_
+        exact ⟨B.mulVecLin x, hxW, rfl⟩
+      exact hmap this
+    simpa [hWrange] using hMxW
 
-lemma notIdentical_of_notAllEqual3₁ {n : ℕ} {α γ δ : Fin n} (h : NotAllEqual3 α γ δ) :
-    ∀ β : Fin n, NotIdentical α β γ δ := by
-  intro β
-  intro hall
-  apply h
-  have : α = γ := by
-    -- from `α = β` and `β = γ`
-    exact hall.1.trans hall.2.1
-  exact ⟨this, hall.2.2⟩
+  -- Define the induced endomorphism on `Fin 4 → ℝ` by conjugating through `B.mulVecLin`.
+  let Rlin : (Fin 4 → ℝ) →ₗ[ℝ] (Fin 4 → ℝ) :=
+    g ∘ₗ M ∘ₗ B.mulVecLin
 
-lemma notIdentical_of_notAllEqual3₂ {n : ℕ} {α β δ : Fin n} (h : NotAllEqual3 α β δ) :
-    ∀ γ : Fin n, NotIdentical α β γ δ := by
-  intro γ
-  intro hall
-  apply h
-  exact ⟨hall.1, hall.2.2⟩
+  have hcomm : ∀ x : Fin 4 → ℝ, B.mulVecLin (Rlin x) = M (B.mulVecLin x) := by
+    intro x
+    -- `M (B.mulVecLin x)` lies in the range, so write it as `B.mulVecLin z`.
+    rcases hM_mem_range x with ⟨z, hz⟩
+    -- Use the defining property of a left inverse on this representative.
+    have hg_apply : g (B.mulVecLin z) = z := by
+      -- apply the equality of linear maps to `z`
+      simpa using congrArg (fun h => h z) hg
+    -- Now compute.
+    -- `Rlin x = g (M (B.mulVecLin x)) = g (B.mulVecLin z) = z`.
+    calc
+      B.mulVecLin (Rlin x)
+          = B.mulVecLin (g (M (B.mulVecLin x))) := by rfl
+      _ = B.mulVecLin (g (B.mulVecLin z)) := by simpa [hz]
+      _ = B.mulVecLin z := by
+        -- avoid unfolding issues: apply `B.mulVecLin` to the equality `g (B.mulVecLin z) = z`
+        simpa using congrArg (fun w : Fin 4 → ℝ => B.mulVecLin w) hg_apply
+      _ = M (B.mulVecLin x) := by simpa [hz]
 
--- Rigidity lemma (Lemma 4.2 of the paper).
--- If a block-diagonal scaling stabilizes the column space `W = ColSpan (StackedMat A)`,
--- then all block scalars are equal.
-lemma Lemma_4_2_Rigidity {n : ℕ} (A : Fin n → Matrix3x4) (s : Fin n → ℝ)
-    (hstack : (StackedMat A).rank = 4) (hcam : ∀ α : Fin n, (A α).rank = 3)
-    (hstab :
-      ∀ x : Fin 4 → ℝ, ∃ y : Fin 4 → ℝ,
-        Matrix.mulVec (BlockDiagonal s) (Matrix.mulVec (StackedMat A) x) =
-          Matrix.mulVec (StackedMat A) y) :
-    ∀ α β : Fin n, s α = s β := by
-  classical
-  -- Choose `f` witnessing stabilization on every `x`.
-  classical
-  choose f hf using hstab
-  -- Build a matrix `R` so that `BlockDiagonal s * StackedMat A = StackedMat A * R`.
-  let R : Matrix (Fin 4) (Fin 4) ℝ := Matrix.of (fun i j => f (Pi.single j 1) i)
-  have hR : BlockDiagonal s * StackedMat A = StackedMat A * R := by
-    ext p j
-    -- Use the stabilization equation with `x = e_j`.
-    have := congrArg (fun v => v p) (hf (Pi.single j 1))
-    -- Expand both sides; note `StackedMat A * R` at column `j` uses `f (e_j)`.
-    simpa [R, BlockDiagonal, StackedMat, Matrix.mul_apply, Matrix.mulVec, Matrix.vecMul, dotProduct,
-      Matrix.of_apply, Pi.single_apply, Finset.sum_ite_eq', Finset.filter_eq', Finset.filter_ne',
-      mul_assoc, mul_comm, mul_left_comm] using this
+  -- Build a concrete matrix for `Rlin` by its action on the standard basis vectors.
+  let Rmat : Matrix (Fin 4) (Fin 4) ℝ :=
+    fun k j => (Rlin (Pi.single j 1)) k
 
-  -- Restricting to camera blocks gives `s α • A α = A α * R`.
-  have hblock : ∀ α : Fin n, s α • A α = A α * R := by
-    intro α
-    ext i j
-    -- Evaluate the matrix identity on row `(α,i)`.
-    have := congrArg (fun M => M (α, i) j) hR
-    -- Left side is diagonal scaling by `s α`.
-    simpa [BlockDiagonal, StackedMat, Matrix.mul_apply, Matrix.diagonal, Finset.sum_ite_eq',
-      Finset.filter_eq', Finset.filter_ne', Matrix.smul_apply, mul_assoc, mul_comm, mul_left_comm]
-      using this
+  -- Each row vector in camera block `a` is a left eigenvector for `Rmat` with eigenvalue `s a`.
+  have hrow_eigen :
+      ∀ p : RowIdx n, (B.row p) ᵥ* Rmat = (s p.1 : ℝ) • (B.row p) := by
+    intro p
+    ext j
+    -- Apply `hcomm` to the basis vector picking out column `j`.
+    have hcol :=
+      congrArg (fun v : RowIdx n → ℝ => v p) (hcomm (Pi.single j 1))
+    -- Rewrite both sides of the commutation in coordinates.
+    -- Left side: `B.mulVecLin (Rlin e_j)` evaluated at `p` is a dot product with row `p`.
+    -- Right side: `M (B.col j)` scales the `p.1` camera block by `s p.1`.
+    -- Finally, unpack `Rmat` so the dot product matches `vecMul`.
+    simpa [B, M, Rmat, Matrix.mulVec, Matrix.vecMul, dotProduct, Matrix.row_apply,
+      Matrix.col_apply, Pi.smul_apply, blockScalarLM, mul_assoc, mul_left_comm, mul_comm,
+      Matrix.mulVec_single_one] using hcol
 
-  -- The row space of each `A α` lies in the left eigenspace of `R` with eigenvalue `s α`.
-  have h_invariant :
-      ∀ α : Fin n,
-        LinearMap.range (Matrix.mulVecLin (A α).transpose) ≤
-          LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))) :=
-    by
-      intro α
-      intro x hx
-      rcases hx with ⟨y, rfl⟩
-      -- Use the transposed block equation.
-      have hT : (s α) • (A α).transpose = R.transpose * (A α).transpose := by
-        -- transpose `hblock`
-        simpa [Matrix.transpose_mul, Matrix.transpose_smul] using congrArg Matrix.transpose (hblock α)
-      -- Rewrite scalar multiplication as multiplication by a diagonal matrix.
-      have hdiag :
-          (Matrix.diagonal (fun _ : Fin 4 => s α)) * (A α).transpose = (s α) • (A α).transpose := by
-        ext i j
-        simp [Matrix.mul_apply, Matrix.diagonal, Matrix.smul_apply]
-      have hmat :
-          (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α)) * (A α).transpose = 0 := by
-        -- `Rᵀ * Aᵀ - (diag sα) * Aᵀ = 0`
-        calc
-          (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α)) * (A α).transpose
-              = R.transpose * (A α).transpose - (Matrix.diagonal (fun _ : Fin 4 => s α)) * (A α).transpose := by
-                  simp [Matrix.sub_mul]
-          _ = (s α) • (A α).transpose - (s α) • (A α).transpose := by
-                  simp [hT, hdiag]
-          _ = 0 := by simp
-      -- Apply the matrix equation to `y` via `mulVecLin`.
-      have : Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))
-              ((A α).transpose.mulVecLin y) = 0 := by
-        -- `mulVecLin_mul` plus `hmat`.
-        -- `mulVecLin ((Rᵀ - diag) * Aᵀ) y = 0`
-        have := congrArg (fun M => Matrix.mulVecLin M y) hmat
-        simpa [Matrix.mulVecLin_mul] using this
-      simpa [LinearMap.mem_ker] using this
+  -- Convert to an eigenvector statement for `Rmatᵀ.mulVec`.
+  let T : Module.End ℝ (Fin 4 → ℝ) := (Rmatᵀ).mulVecLin
 
-  -- Each eigenspace has dimension ≥ 3 (since `rank(A α) = 3`).
-  have h_geometric :
-      ∀ α : Fin n,
-        3 ≤ Module.finrank ℝ
-          (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α)))) :=
-    by
-      intro α
-      -- finrank(range(Aαᵀ)) = rank(Aαᵀ) = rank(Aα) = 3
-      have hrA : (A α).transpose.rank = 3 := by
-        simpa [Matrix.rank_transpose (R := ℝ) (A := A α)] using congrArg id (hcam α)
-      have hfin_range :
-          Module.finrank ℝ (LinearMap.range (Matrix.mulVecLin (A α).transpose)) = 3 := by
-        simpa [Matrix.rank] using hrA
-      -- range ≤ kernel, so finrank(range) ≤ finrank(kernel)
-      have hmono := Submodule.finrank_mono (h_invariant α)
-      -- Rewrite finrank of the range as 3.
-      simpa [hfin_range] using hmono
+  have hrow_eigen_T :
+      ∀ p : RowIdx n, T (B.row p) = (s p.1 : ℝ) • (B.row p) := by
+    intro p
+    -- `Rmatᵀ *ᵥ v = v ᵥ* Rmat`.
+    simpa [T, Matrix.mulVec_transpose] using hrow_eigen p
 
-  -- Distinct eigenvalues give disjoint eigenspaces, contradiction in dimension 4.
-  intro α β
-  by_contra hne
-  have hinf :
-      LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))) ⊓
-        LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β))) = ⊥ := by
-    -- If `x` lies in both kernels, subtract the equations.
-    ext x
-    constructor
-    · intro hx
-      rcases hx with ⟨hxα, hxβ⟩
-      have hxα' : (R.transpose.mulVec x) = (s α) • x := by
-        -- `(Rᵀ - sα I) x = 0`
-        have := congrArg id hxα
-        -- unfold kernel membership
-        have hx0 : Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α)) x = 0 := by
-          simpa [LinearMap.mem_ker] using hxα
-        -- expand
-        -- `Rᵀ.mulVec x - (diag sα).mulVec x = 0`
-        have : R.transpose.mulVec x = (Matrix.diagonal (fun _ : Fin 4 => s α)).mulVec x := by
-          -- rearrange
-          simpa [Matrix.mulVecLin_apply, Matrix.mulVec, Matrix.sub_mulVec, sub_eq_zero] using hx0
-        -- diagonal mulVec is scalar scaling
-        simpa [Matrix.mulVec, Matrix.diagonal, Matrix.smul_apply] using this
-      have hxβ' : (R.transpose.mulVec x) = (s β) • x := by
-        have hx0 : Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)) x = 0 := by
-          simpa [LinearMap.mem_ker] using hxβ
-        have : R.transpose.mulVec x = (Matrix.diagonal (fun _ : Fin 4 => s β)).mulVec x := by
-          simpa [Matrix.mulVecLin_apply, Matrix.mulVec, Matrix.sub_mulVec, sub_eq_zero] using hx0
-        simpa [Matrix.mulVec, Matrix.diagonal, Matrix.smul_apply] using this
-      -- Now `(s α - s β) • x = 0`, hence `x = 0`.
-      have : (s α - s β) • x = 0 := by
-        -- subtract `hxβ'` from `hxα'`
-        have := congrArg (fun v => v) (hxα'.trans hxβ'.symm)
-        -- `sα•x = sβ•x`
-        have hs : (s α) • x = (s β) • x := by simpa using this
-        -- rearrange
-        simpa [sub_eq_zero] using (sub_eq_zero.mpr hs)
-      have hsne : s α - s β ≠ 0 := sub_ne_zero.mpr (Ne.symm hne)
-      -- scalar multiplication by nonzero is injective in a vector space
-      have : x = 0 := by
-        -- use `smul_eq_zero` over a field
-        have := (smul_eq_zero.mp this)
-        exact this.resolve_left hsne
-      simpa [this]
-    · intro hx
-      -- membership in `⊥` means `x = 0`, hence in both kernels
-      have hx0 : x = 0 := by simpa using hx
-      subst hx0
-      simp
-  -- Finrank inequality: two `≥ 3` subspaces with trivial intersection can't fit in 4D.
-  have hsum :
-      Module.finrank ℝ
-        (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α)))) +
-        Module.finrank ℝ
-        (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)))) ≤ 4 := by
-    -- `finrank (sup) + finrank (inf) = ...`
-    have := (Submodule.finrank_sup_add_finrank_inf_eq
-      (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))))
-      (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)))))
-    -- `inf = ⊥`, and `sup ≤ ⊤` so its finrank ≤ 4.
-    have hsup_le :
-        Module.finrank ℝ
-          (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))) ⊔
-            LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)))) ≤ 4 :=
-      (Submodule.finrank_le _).trans (by simp [finrank_pi])
-    -- Combine.
-    -- from `this`: finrank(sup)+finrank(inf) = finrank(kerα)+finrank(kerβ)
-    -- so finrank(kerα)+finrank(kerβ) = finrank(sup)+finrank(inf) ≤ 4
-    have : Module.finrank ℝ
-        (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α)))) +
-        Module.finrank ℝ
-        (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)))) =
-        Module.finrank ℝ
-          (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))) ⊔
-            LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)))) +
-        Module.finrank ℝ
-          (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))) ⊓
-            LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)))) := by
-        simpa [this] using this.symm
-    -- Use `inf = ⊥`.
-    have hinf0 : Module.finrank ℝ
-        (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))) ⊓
-          LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)))) = 0 := by
-      simpa [hinf, finrank_bot] using rfl
-    -- Now conclude.
-    -- We avoid rewriting `this` directly; just use the inequality on the RHS.
-    have :
-        Module.finrank ℝ
-          (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))) ⊔
-            LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)))) +
-        Module.finrank ℝ
-          (LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s α))) ⊓
-            LinearMap.ker (Matrix.mulVecLin (R.transpose - Matrix.diagonal (fun _ : Fin 4 => s β)))) ≤ 4 := by
-      -- `inf` term is 0, so reduce to `hsup_le`.
-      simpa [hinf0] using (add_le_add_right hsup_le _)
-    -- Rewrite the LHS using `Submodule.finrank_sup_add_finrank_inf_eq`.
-    simpa [Submodule.finrank_sup_add_finrank_inf_eq] using this
-  have hα := h_geometric α
-  have hβ := h_geometric β
-  linarith
+  -- For each camera `a`, the 3D row-span of `A a` sits in the eigenspace for eigenvalue `s a`.
+  have hrowSpan_le_eigenspace :
+      ∀ a : Fin n, Submodule.span ℝ (Set.range (A a).row) ≤ T.eigenspace (s a : ℝ) := by
+    intro a
+    refine Submodule.span_le.2 ?_
+    rintro _ ⟨i, rfl⟩
+    -- Identify this row with the corresponding row of the stacked matrix.
+    have hrow_id : (A a).row i = B.row (a, i) := by
+      ext k; rfl
+    -- Membership in the eigenspace is exactly the eigenvector equation.
+    rw [hrow_id]
+    -- unfold membership condition
+    exact (Module.End.mem_eigenspace_iff).2 (hrow_eigen_T (p := (a, i)))
 
--- TODO: reverse direction (Problem 9), proved from rank/minor + generic spanning + rigidity.
--- Reverse direction: for generic cameras, F(T) = 0 → factorizable
+  have hfinrank_rowSpan :
+      ∀ a : Fin n, Module.finrank ℝ ↥(Submodule.span ℝ (Set.range (A a).row)) = 3 := by
+    intro a
+    -- `rank = finrank(span(rows))`.
+    have := (Matrix.rank_eq_finrank_span_row (R := ℝ) (A := A a)).symm
+    -- Use `hcam a : (A a).rank = 3`.
+    simpa [hcam a] using this
+
+  have hfinrank_eigenspace_ge :
+      ∀ a : Fin n, 3 ≤ Module.finrank ℝ ↥(T.eigenspace (s a : ℝ)) := by
+    intro a
+    have hmono := Submodule.finrank_mono (hrowSpan_le_eigenspace a)
+    -- rewrite the finrank of the row span as 3
+    simpa [hfinrank_rowSpan a] using hmono
+
+  -- Distinct eigenvalues would force two disjoint eigenspaces of dimension ≥ 3 each, impossible in 4D.
+  by_contra hneq
+  have hsneq : (s α : ℝ) ≠ (s β : ℝ) := by
+    intro h
+    apply hneq
+    exact Units.ext (by simpa using h)
+  -- Prove the eigenspaces are disjoint for distinct eigenvalues.
+  have hdisj : Disjoint (T.eigenspace (s α : ℝ)) (T.eigenspace (s β : ℝ)) := by
+    -- use the elementwise characterization
+    refine (Submodule.disjoint_def).2 ?_
+    intro x hxα hxβ
+    have hxα' : T x = (s α : ℝ) • x := (Module.End.mem_eigenspace_iff).1 hxα
+    have hxβ' : T x = (s β : ℝ) • x := (Module.End.mem_eigenspace_iff).1 hxβ
+    have hEq : (s α : ℝ) • x = (s β : ℝ) • x := by
+      calc
+        (s α : ℝ) • x = T x := by simpa using hxα'.symm
+        _ = (s β : ℝ) • x := by simpa using hxβ'
+    have hdiff : ((s α : ℝ) - (s β : ℝ)) • x = 0 := by
+      simp [sub_smul, hEq]
+    have hscal : ((s α : ℝ) - (s β : ℝ)) ≠ 0 := sub_ne_zero.2 hsneq
+    exact (smul_eq_zero.mp hdiff).resolve_left hscal
+
+  have hsum_finrank :
+      Module.finrank ℝ ↥(T.eigenspace (s α : ℝ)) +
+        Module.finrank ℝ ↥(T.eigenspace (s β : ℝ)) ≤ 4 := by
+    -- Use `finrank(sup) ≤ finrank(ambient)` and disjointness to compute `finrank(sup)`.
+    have hsup_le : Module.finrank ℝ ↥((T.eigenspace (s α : ℝ)) ⊔ (T.eigenspace (s β : ℝ))) ≤
+        Module.finrank ℝ (Fin 4 → ℝ) := Submodule.finrank_le _
+    have hdim : Module.finrank ℝ (Fin 4 → ℝ) = 4 := by
+      simp [Module.finrank_pi, Fintype.card_fin]
+    have hsup_eq :
+        Module.finrank ℝ ↥((T.eigenspace (s α : ℝ)) ⊔ (T.eigenspace (s β : ℝ))) =
+          Module.finrank ℝ ↥(T.eigenspace (s α : ℝ)) +
+            Module.finrank ℝ ↥(T.eigenspace (s β : ℝ)) := by
+      -- `finrank sup + finrank inf = finrank + finrank`, and `inf = ⊥` by disjointness.
+      have h :=
+        (Submodule.finrank_sup_add_finrank_inf_eq
+          (T.eigenspace (s α : ℝ)) (T.eigenspace (s β : ℝ)))
+      have hinf : (T.eigenspace (s α : ℝ)) ⊓ (T.eigenspace (s β : ℝ)) = ⊥ := by
+        simpa using (disjoint_iff.1 hdisj)
+      -- with `inf = ⊥`, the extra term is 0
+      -- rewrite `inf` and simplify `+ 0`.
+      -- We do this with `rw` instead of `simp [hinf]` to ensure the coercion `↥(s ⊓ t)` rewrites.
+      have h' := h
+      -- rewrite inside the finrank term
+      rw [hinf] at h'
+      simpa using h'
+    -- Now finish the bound.
+    have hsup_le' : Module.finrank ℝ ↥((T.eigenspace (s α : ℝ)) ⊔ (T.eigenspace (s β : ℝ))) ≤ 4 := by
+      simpa [hdim] using hsup_le
+    simpa [hsup_eq] using hsup_le'
+
+  have hge : 6 ≤
+      Module.finrank ℝ ↥(T.eigenspace (s α : ℝ)) +
+        Module.finrank ℝ ↥(T.eigenspace (s β : ℝ)) := by
+    have hα' := hfinrank_eigenspace_ge (a := α)
+    have hβ' := hfinrank_eigenspace_ge (a := β)
+    -- `3+3 = 6`
+    simpa [Nat.add_comm, Nat.add_left_comm, Nat.add_assoc] using Nat.add_le_add hα' hβ'
+
+  have : 6 ≤ 4 := le_trans hge hsum_finrank
+  exact (by decide : ¬ (6 ≤ 4)) this
+
+/--
+The "rank-only" genericity used by the genericity polynomial section:
+stacked rank `= 4` and each camera has rank `= 3`.
+
+This is intentionally weaker than `GenericCameras`, because the current polynomial construction
+only encodes these rank conditions.
+-/
+def RankGenericCameras {n : ℕ} (A : Fin n → Matrix3x4) : Prop :=
+  (StackedMat A).rank = 4 ∧ (∀ α : Fin n, (A α).rank = 3)
+
+lemma GenericCameras.toRankGeneric {n : ℕ} {A : Fin n → Matrix3x4} (h : GenericCameras A) :
+    RankGenericCameras A :=
+  ⟨h.1, h.2.1⟩
+
+lemma GenericCameras.rigid {n : ℕ} {A : Fin n → Matrix3x4} (h : GenericCameras A) :
+    RigidBlockScalarStabilizer A :=
+  rigidBlockScalarStabilizer_of_rank (A := A) h.1 h.2.1
+
+
 /- PROVIDED SOLUTION:
 
 Goal (reverse direction of Problem 9):
@@ -1147,6 +1054,602 @@ That completes the reverse direction, assuming the generic spanning + rigidity h
 `GenericCameras`.
 -/
 
+-- --------------------------------------------------------------------
+-- Reverse direction, decomposed into manageable lemmas
+-- --------------------------------------------------------------------
+
+
+
+lemma notIdentical_of_notAllEqual3 {n : ℕ} {α β γ δ : Fin n} (h : NotAllEqual3 β γ δ) :
+    NotIdentical α β γ δ := by
+  intro hall
+  exact h ⟨hall.2.1, hall.2.2⟩
+
+lemma lam_ne_zero_of_notAllEqual3 {n : ℕ} (lam : Lambda n)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    {β γ δ : Fin n} (h : NotAllEqual3 β γ δ) :
+    ∀ α : Fin n, lam α β γ δ ≠ 0 := by
+  intro α
+  exact (hsupp α β γ δ).2 (notIdentical_of_notAllEqual3 (α := α) h)
+
+lemma rank_rowScaled_eq {α β : Type*} [Fintype α] [Fintype β]
+    [DecidableEq α] [DecidableEq β]
+    (M : Matrix α β ℝ) (r : α → ℝ) (hr : ∀ i, r i ≠ 0) :
+    (Matrix.of fun i j => r i * M i j).rank = M.rank := by
+  classical
+  let Ms : Matrix α β ℝ := Matrix.of fun i j => r i * M i j
+  have hle1 : Ms.rank ≤ M.rank := by
+    simpa [Ms, one_mul] using (rank_scaled_le (M := M) (r := r) (c := fun _ => (1 : ℝ)))
+  have hM : M = Matrix.of (fun i j => (r i)⁻¹ * Ms i j) := by
+    ext i j
+    have hri : (r i)⁻¹ * (r i * M i j) = M i j := by
+      field_simp [hr i]
+    simpa [Ms, mul_assoc] using hri.symm
+  have hle2 : M.rank ≤ Ms.rank := by
+    have hscaled : (Matrix.of fun i j => (r i)⁻¹ * Ms i j).rank ≤ Ms.rank := by
+      simpa [one_mul] using
+        (rank_scaled_le (M := Ms) (r := fun i => (r i)⁻¹) (c := fun _ => (1 : ℝ)))
+    simpa [hM] using hscaled
+  exact le_antisymm hle1 hle2
+
+lemma exists_fin_ne_of_five {n : ℕ} (hn : 5 ≤ n) (a : Fin n) : ∃ b : Fin n, b ≠ a := by
+  have h0 : (0 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 0 < 5) hn
+  have h1 : (1 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 1 < 5) hn
+  by_cases ha : a.1 = 0
+  · refine ⟨⟨1, h1⟩, ?_⟩
+    intro h
+    have : (a : ℕ) = 1 := by simpa using congrArg Fin.val h.symm
+    have : (1 : ℕ) = 0 := by simpa [ha] using this
+    exact Nat.one_ne_zero this
+  · refine ⟨⟨0, h0⟩, ?_⟩
+    intro h
+    apply ha
+    simpa using congrArg Fin.val h.symm
+
+def modeCoeff {n : ℕ} (m : Fin 4) (lam : Lambda n)
+    (row a b c : Fin n) : ℝ :=
+  match m with
+  | ⟨0, _⟩ => lam row a b c
+  | ⟨1, _⟩ => lam a row b c
+  | ⟨2, _⟩ => lam a b row c
+  | ⟨3, _⟩ => lam a b c row
+
+lemma notIdentical_mode1_of_notAllEqual3 {n : ℕ} {row a b c : Fin n}
+    (h : NotAllEqual3 a b c) : NotIdentical a row b c := by
+  intro hall
+  exact h ⟨hall.1.trans hall.2.1, hall.2.2⟩
+
+lemma notIdentical_mode2_of_notAllEqual3 {n : ℕ} {row a b c : Fin n}
+    (h : NotAllEqual3 a b c) : NotIdentical a b row c := by
+  intro hall
+  exact h ⟨hall.1, hall.2.1.trans hall.2.2⟩
+
+lemma notIdentical_mode3_of_notAllEqual3 {n : ℕ} {row a b c : Fin n}
+    (h : NotAllEqual3 a b c) : NotIdentical a b c row := by
+  intro hall
+  exact h ⟨hall.1, hall.2.1⟩
+
+lemma modeCoeff_ne_zero_of_notAllEqual3 {n : ℕ} (m : Fin 4) (lam : Lambda n)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    {a b c : Fin n} (h : NotAllEqual3 a b c) :
+    ∀ row : Fin n, modeCoeff m lam row a b c ≠ 0 := by
+  intro row
+  fin_cases m
+  · simpa [modeCoeff] using (lam_ne_zero_of_notAllEqual3 (lam := lam) hsupp (β := a) (γ := b)
+      (δ := c) h row)
+  · simpa [modeCoeff] using (hsupp a row b c).2 (notIdentical_mode1_of_notAllEqual3 (row := row)
+      (a := a) (b := b) (c := c) h)
+  · simpa [modeCoeff] using (hsupp a b row c).2 (notIdentical_mode2_of_notAllEqual3 (row := row)
+      (a := a) (b := b) (c := c) h)
+  · simpa [modeCoeff] using (hsupp a b c row).2 (notIdentical_mode3_of_notAllEqual3 (row := row)
+      (a := a) (b := b) (c := c) h)
+
+lemma submatrix27_scaled_eq_rowScale {n : ℕ} (m : Fin 4) (A : Fin n → Matrix3x4)
+    (lam : Lambda n) (a b c : Fin n) :
+    ((Unfold m (scaleQ lam (constructQ A))).submatrix id (colIdxOfTriple a b c))
+      = Matrix.of (fun p t => modeCoeff m lam p.1 a b c * (Submatrix27 A m a b c) p t) := by
+  ext p t
+  fin_cases m <;>
+    simp [Submatrix27, colIdxOfTriple, modeCoeff, Unfold, scaleQ]
+
+lemma colSpan_rowBlockScale {n : ℕ} {k : Type*} [Fintype k] [DecidableEq k]
+    (M : Matrix (RowIdx n) k ℝ) (s : Fin n → ℝ) :
+    ColSpan (Matrix.of (fun p j => s p.1 * M p j))
+      = (ColSpan M).map (blockScalarLM s) := by
+  apply le_antisymm
+  · refine Submodule.span_le.2 ?_
+    rintro _ ⟨j, rfl⟩
+    refine (Submodule.mem_map).2 ?_
+    refine ⟨M.col j, ?_, ?_⟩
+    · exact Submodule.subset_span ⟨j, rfl⟩
+    · ext p
+      simp [blockScalarLM, Matrix.col, Matrix.of_apply]
+  · refine (Submodule.map_le_iff_le_comap).2 ?_
+    refine Submodule.span_le.2 ?_
+    rintro _ ⟨j, rfl⟩
+    have hcol :
+        blockScalarLM s (M.col j) = (Matrix.of (fun p j => s p.1 * M p j)).col j := by
+      ext p
+      simp [blockScalarLM, Matrix.col, Matrix.of_apply]
+    simpa [hcol] using
+      (Submodule.subset_span
+        (s := Set.range (Matrix.col (Matrix.of (fun p j => s p.1 * M p j))))
+        ⟨j, rfl⟩)
+
+theorem separate_mode_of_generic {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4) (lam : Lambda n)
+    (hgen : GenericCameras A) (m : Fin 4)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
+    ∃ (u : Fin n → ℝˣ) (μ : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ row a b c, NotAllEqual3 a b c →
+        modeCoeff m lam row a b c = (u row : ℝ) * (μ a b c : ℝ) := by
+  classical
+  rcases hgen with ⟨hstack, hcam, hG3⟩
+  have _ : ∀ α : Fin n, (A α).rank = 3 := hcam
+  have hGm : G3 A m := hG3 m
+
+  have hrankW :
+      (StackedMat A).rank = Module.finrank ℝ (Wspace A) := by
+    simpa [Wspace, ColSpan] using
+      (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := StackedMat A))
+  have hfinW : Module.finrank ℝ (Wspace A) = 4 := by
+    simpa [hrankW] using hstack
+
+  have h0 : (0 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 0 < 5) hn
+  have h1 : (1 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 1 < 5) hn
+  have h2 : (2 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 2 < 5) hn
+  let i0 : Fin n := ⟨0, h0⟩
+  let i1 : Fin n := ⟨1, h1⟩
+  let i2 : Fin n := ⟨2, h2⟩
+  have h01 : i0 ≠ i1 := by
+    intro h
+    have : (0 : ℕ) = 1 := by simpa [i0, i1] using congrArg Fin.val h
+    exact Nat.zero_ne_one this
+  have hNotAll012 : NotAllEqual3 i0 i1 i2 := by
+    intro h
+    exact h01 h.1
+
+  have hcol_of :
+      ∀ a b c : Fin n, NotAllEqual3 a b c →
+        ColSpan (Unfold m (scaleQ lam (constructQ A))) =
+          (Wspace A).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) := by
+    intro a b c hneq
+    let M : Matrix (RowIdx n) (ColIdx n) ℝ := Unfold m (scaleQ lam (constructQ A))
+    let S : Matrix (RowIdx n) Triple3 ℝ := Submatrix27 A m a b c
+    let Ss : Matrix (RowIdx n) Triple3 ℝ := M.submatrix id (colIdxOfTriple a b c)
+    have hSs_def : Ss = Matrix.of (fun p t => modeCoeff m lam p.1 a b c * S p t) := by
+      simpa [Ss, M, S] using
+        (submatrix27_scaled_eq_rowScale (m := m) (A := A) (lam := lam) (a := a) (b := b) (c := c))
+    have hcolS : ColSpan S = Wspace A := by
+      simpa [S] using hGm a b c hneq
+    have hfinS : Module.finrank ℝ (ColSpan S) = 4 := by
+      rw [hcolS]
+      exact hfinW
+    have hSrank' : S.rank = Module.finrank ℝ (ColSpan S) := by
+      simpa [ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := S))
+    have hSrank : S.rank = 4 := by
+      simpa [hSrank'] using hfinS
+    have hs_nonzero : ∀ p : RowIdx n, modeCoeff m lam p.1 a b c ≠ 0 := by
+      intro p
+      exact modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp (a := a) (b := b)
+        (c := c) hneq p.1
+    have hSs_rank : Ss.rank = 4 := by
+      calc
+        Ss.rank = (Matrix.of (fun p t => modeCoeff m lam p.1 a b c * S p t)).rank := by
+          simpa [hSs_def]
+        _ = S.rank := by
+          simpa using
+            (rank_rowScaled_eq (M := S) (r := fun p : RowIdx n => modeCoeff m lam p.1 a b c)
+              (hr := hs_nonzero))
+        _ = 4 := hSrank
+    have hcols : ∀ j : Triple3, ∃ i : ColIdx n, Ss.col j = M.col i := by
+      intro j
+      refine ⟨colIdxOfTriple a b c j, ?_⟩
+      ext p
+      simp [Ss, M]
+    have hcolEq : ColSpan Ss = ColSpan M :=
+      colSpan_eq_of_cols_subtype_and_rank (M := M) (S := Ss) hcols (hrank m) hSs_rank
+    have hscaled :
+        ColSpan Ss =
+          (ColSpan S).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) := by
+      calc
+        ColSpan Ss = ColSpan (Matrix.of (fun p t => modeCoeff m lam p.1 a b c * S p t)) := by
+          simpa [hSs_def]
+        _ = (ColSpan S).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) :=
+          colSpan_rowBlockScale (M := S) (s := fun α => modeCoeff m lam α a b c)
+    calc
+      ColSpan (Unfold m (scaleQ lam (constructQ A))) = ColSpan M := by rfl
+      _ = ColSpan Ss := hcolEq.symm
+      _ = (ColSpan S).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) := hscaled
+      _ = (Wspace A).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) := by
+        simpa [hcolS]
+
+  let u : Fin n → ℝˣ := fun row =>
+    Units.mk0 (modeCoeff m lam row i0 i1 i2 / modeCoeff m lam i0 i0 i1 i2) (by
+      have hnum := modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+        (a := i0) (b := i1) (c := i2) hNotAll012 row
+      have hden := modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+        (a := i0) (b := i1) (c := i2) hNotAll012 i0
+      exact div_ne_zero hnum hden)
+  let μ : Fin n → Fin n → Fin n → ℝˣ := fun a b c =>
+    if hneq : NotAllEqual3 a b c then
+      Units.mk0 (modeCoeff m lam i0 a b c)
+        (modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+          (a := a) (b := b) (c := c) hneq i0)
+    else 1
+
+  refine ⟨u, μ, ?_⟩
+  intro row a b c hneq
+  let us : Fin n → ℝˣ := fun α =>
+    Units.mk0 (modeCoeff m lam α a b c)
+      (modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+        (a := a) (b := b) (c := c) hneq α)
+  let usRef : Fin n → ℝˣ := fun α =>
+    Units.mk0 (modeCoeff m lam α i0 i1 i2)
+      (modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+        (a := i0) (b := i1) (c := i2) hNotAll012 α)
+  let sRatio : Fin n → ℝˣ := fun α => (us α)⁻¹ * usRef α
+  let Ls := blockScalarLM (fun α => (us α : ℝ))
+  let Lref := blockScalarLM (fun α => (usRef α : ℝ))
+  let Linv := blockScalarLM (fun α => (((us α)⁻¹ : ℝˣ) : ℝ))
+  let Lratio := blockScalarLM (fun α => (sRatio α : ℝ))
+
+  have hmapEq :
+      (Wspace A).map Ls = (Wspace A).map Lref := by
+    have hcur := hcol_of a b c hneq
+    have href := hcol_of i0 i1 i2 hNotAll012
+    exact by
+      simpa [Ls, Lref, us, usRef] using (hcur.symm.trans href)
+
+  have hcomp_inv_s : Linv.comp Ls = LinearMap.id := by
+    apply LinearMap.ext
+    intro x
+    ext p
+    have hmul : (((us p.1)⁻¹ : ℝˣ) : ℝ) * ((us p.1 : ℝ) * x p) = x p := by
+      calc
+        (((us p.1)⁻¹ : ℝˣ) : ℝ) * ((us p.1 : ℝ) * x p)
+            = ((((us p.1)⁻¹ : ℝˣ) : ℝ) * (us p.1 : ℝ)) * x p := by ring
+        _ = x p := by simp
+    simpa [Linv, Ls, blockScalarLM, mul_assoc] using hmul
+  have hcomp_inv_ref : Linv.comp Lref = Lratio := by
+    ext v p
+    simp [Linv, Lref, Lratio, sRatio, blockScalarLM, mul_assoc, mul_left_comm, mul_comm]
+
+  have hstable : (Wspace A).map Lratio = Wspace A := by
+    calc
+      (Wspace A).map Lratio = (Wspace A).map (Linv.comp Lref) := by simpa [hcomp_inv_ref]
+      _ = ((Wspace A).map Lref).map Linv := by
+            simpa using (Submodule.map_comp (f := Lref) (g := Linv) (p := Wspace A))
+      _ = ((Wspace A).map Ls).map Linv := by simpa [hmapEq]
+      _ = (Wspace A).map (Linv.comp Ls) := by
+            simpa using (Submodule.map_comp (f := Ls) (g := Linv) (p := Wspace A)).symm
+      _ = (Wspace A).map LinearMap.id := by simpa [hcomp_inv_s]
+      _ = Wspace A := by simp
+
+  have hgen' : GenericCameras A := ⟨hstack, hcam, hG3⟩
+  have hRigid : RigidBlockScalarStabilizer A := GenericCameras.rigid hgen'
+  have hsConst : ∀ α β : Fin n, sRatio α = sRatio β := hRigid sRatio hstable
+  have hsrow : sRatio row = sRatio i0 := hsConst row i0
+  have hsrow' :
+      modeCoeff m lam row i0 i1 i2 / modeCoeff m lam row a b c =
+        modeCoeff m lam i0 i0 i1 i2 / modeCoeff m lam i0 a b c := by
+    simpa [sRatio, us, usRef, Units.val_mk0, div_eq_mul_inv, mul_assoc, mul_left_comm, mul_comm]
+      using congrArg (fun z : ℝˣ => (z : ℝ)) hsrow
+
+  have hden0 : modeCoeff m lam i0 a b c ≠ 0 :=
+    modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+      (a := a) (b := b) (c := c) hneq i0
+  have hdenrow : modeCoeff m lam row a b c ≠ 0 :=
+    modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+      (a := a) (b := b) (c := c) hneq row
+  have href0 : modeCoeff m lam i0 i0 i1 i2 ≠ 0 :=
+    modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+      (a := i0) (b := i1) (c := i2) hNotAll012 i0
+
+  have hcross :
+      modeCoeff m lam row i0 i1 i2 * modeCoeff m lam i0 a b c =
+        modeCoeff m lam i0 i0 i1 i2 * modeCoeff m lam row a b c := by
+    have h := hsrow'
+    field_simp [hdenrow, hden0] at h
+    simpa [mul_assoc, mul_left_comm, mul_comm] using h
+  have hsolve :
+      modeCoeff m lam row a b c =
+        modeCoeff m lam i0 a b c *
+          (modeCoeff m lam row i0 i1 i2 / modeCoeff m lam i0 i0 i1 i2) := by
+    have hbc :
+        modeCoeff m lam row a b c * modeCoeff m lam i0 i0 i1 i2 =
+          modeCoeff m lam row i0 i1 i2 * modeCoeff m lam i0 a b c := by
+      calc
+        modeCoeff m lam row a b c * modeCoeff m lam i0 i0 i1 i2 =
+            modeCoeff m lam i0 i0 i1 i2 * modeCoeff m lam row a b c := by ring
+        _ = modeCoeff m lam row i0 i1 i2 * modeCoeff m lam i0 a b c := by
+            simpa [mul_assoc, mul_left_comm, mul_comm] using hcross.symm
+    have hdiv :
+        modeCoeff m lam row a b c =
+          (modeCoeff m lam row i0 i1 i2 * modeCoeff m lam i0 a b c) /
+            modeCoeff m lam i0 i0 i1 i2 := by
+      exact (eq_div_iff href0).2 (by
+        simpa [mul_assoc, mul_left_comm, mul_comm] using hbc)
+    simpa [div_eq_mul_inv, mul_assoc, mul_left_comm, mul_comm] using hdiv
+
+  simpa [u, μ, hneq, Units.val_mk0, mul_assoc, mul_left_comm, mul_comm] using hsolve
+
+/-- PROVIDED SOLUTION:
+
+This lemma packages steps (3)-(5) of the informal proof in `proofdocs/solution.md`:
+
+Given:
+- the support condition `lam α β γ δ ≠ 0 ↔ NotIdentical α β γ δ`, and
+- the rank bounds `rank(Unfold m (scaleQ lam (constructQ A))) ≤ 4` for all modes `m`, and
+- the (missing, but intended) generic spanning + rigidity hypotheses inside `GenericCameras A`,
+
+one proves the first separation:
+  `lam α β γ δ = uα * μβγδ` whenever `(β,γ,δ)` is not all equal.
+
+Sketch:
+- Fix a triple `(β,γ,δ)` not all equal. Then `lam α β γ δ ≠ 0` for all `α`, so the block-diagonal
+  scaling matrix `D_{βγδ}` is invertible.
+- The generic spanning hypothesis identifies a 4D subspace `W = col(StackedMat A)` such that the
+  27-column submatrix in mode 0 spans `W`.
+- Rank ≤ 4 forces `col(Unfold 0 (scaleQ lam Q)) = D_{βγδ} W`, for all such triples.
+- Rigidity (Lemma 4.2 in the paper) then forces ratios of the diagonal blocks to be constant in `α`,
+  yielding the desired factorization along the `α`-index.
+- Units are used to avoid division-by-zero problems; nonvanishing comes from the support condition.
+-/
+theorem separate_alpha_of_generic {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4) (lam : Lambda n)
+    (hgen : GenericCameras A)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
+    ∃ (u : Fin n → ℝˣ) (μ : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ α β γ δ, NotAllEqual3 β γ δ →
+        lam α β γ δ = (u α : ℝ) * (μ β γ δ : ℝ) := by
+  classical
+  simpa [modeCoeff] using
+    (separate_mode_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (m := (0 : Fin 4))
+      (hsupp := hsupp) (hrank := hrank))
+
+/-- PROVIDED SOLUTION:
+
+Analog of `separate_alpha_of_generic` but along the `β`-index (mode 1 of the unfolding).
+
+Result:
+  `lam α β γ δ = vβ * ναγδ` whenever `(α,γ,δ)` is not all equal.
+-/
+theorem separate_beta_of_generic {n : ℕ} (A : Fin n → Matrix3x4) (lam : Lambda n)
+    (hn : 5 ≤ n) (hgen : GenericCameras A)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
+    ∃ (v : Fin n → ℝˣ) (ν : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ α β γ δ, NotAllEqual3 α γ δ →
+        lam α β γ δ = (v β : ℝ) * (ν α γ δ : ℝ) := by
+  classical
+  rcases separate_mode_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (m := (1 : Fin 4))
+      (hsupp := hsupp) (hrank := hrank) with ⟨v, ν, hsep⟩
+  refine ⟨v, ν, ?_⟩
+  intro α β γ δ hneq
+  simpa [modeCoeff] using hsep β α γ δ hneq
+
+/-- PROVIDED SOLUTION:
+
+Analog of `separate_alpha_of_generic` but along the `γ`-index (mode 2).
+
+Result:
+  `lam α β γ δ = wγ * ξαβδ` whenever `(α,β,δ)` is not all equal.
+-/
+theorem separate_gamma_of_generic {n : ℕ} (A : Fin n → Matrix3x4) (lam : Lambda n)
+    (hn : 5 ≤ n) (hgen : GenericCameras A)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
+    ∃ (w : Fin n → ℝˣ) (ξ : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ α β γ δ, NotAllEqual3 α β δ →
+        lam α β γ δ = (w γ : ℝ) * (ξ α β δ : ℝ) := by
+  classical
+  rcases separate_mode_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (m := (2 : Fin 4))
+      (hsupp := hsupp) (hrank := hrank) with ⟨w, ξ, hsep⟩
+  refine ⟨w, ξ, ?_⟩
+  intro α β γ δ hneq
+  simpa [modeCoeff] using hsep γ α β δ hneq
+
+/-- PROVIDED SOLUTION:
+
+Analog of `separate_alpha_of_generic` but along the `δ`-index (mode 3).
+
+Result:
+  `lam α β γ δ = xδ * ζαβγ` whenever `(α,β,γ)` is not all equal.
+-/
+theorem separate_delta_of_generic {n : ℕ} (A : Fin n → Matrix3x4) (lam : Lambda n)
+    (hn : 5 ≤ n) (hgen : GenericCameras A)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
+    ∃ (x : Fin n → ℝˣ) (ζ : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ α β γ δ, NotAllEqual3 α β γ →
+        lam α β γ δ = (x δ : ℝ) * (ζ α β γ : ℝ) := by
+  classical
+  rcases separate_mode_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (m := (3 : Fin 4))
+      (hsupp := hsupp) (hrank := hrank) with ⟨x, ζ, hsep⟩
+  refine ⟨x, ζ, ?_⟩
+  intro α β γ δ hneq
+  simpa [modeCoeff] using hsep δ α β γ hneq
+
+/-- PROVIDED SOLUTION:
+
+Propagation step (paper’s Section 4, using `n ≥ 5`):
+
+From the four partial separations obtained by comparing column spaces in each unfolding mode, one
+derives the full factorization
+  `lam α β γ δ = uα vβ wγ xδ`
+on all `NotIdentical α β γ δ`.
+
+This is a combinatorial "patching" argument that uses the abundance of distinct indices when `n ≥ 5`
+to move between the various not-all-equal regimes and extend the multiplicative decomposition to all
+off-diagonal entries.
+-/
+theorem full_factorization_of_separations {n : ℕ} (hn : 5 ≤ n) (lam : Lambda n)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    (hα :
+      ∃ (u : Fin n → ℝˣ) (μ : Fin n → Fin n → Fin n → ℝˣ),
+        ∀ α β γ δ, NotAllEqual3 β γ δ →
+          lam α β γ δ = (u α : ℝ) * (μ β γ δ : ℝ))
+    (hβ :
+      ∃ (v : Fin n → ℝˣ) (ν : Fin n → Fin n → Fin n → ℝˣ),
+        ∀ α β γ δ, NotAllEqual3 α γ δ →
+          lam α β γ δ = (v β : ℝ) * (ν α γ δ : ℝ))
+    (hγ :
+      ∃ (w : Fin n → ℝˣ) (ξ : Fin n → Fin n → Fin n → ℝˣ),
+        ∀ α β γ δ, NotAllEqual3 α β δ →
+          lam α β γ δ = (w γ : ℝ) * (ξ α β δ : ℝ))
+    (hδ :
+      ∃ (x : Fin n → ℝˣ) (ζ : Fin n → Fin n → Fin n → ℝˣ),
+        ∀ α β γ δ, NotAllEqual3 α β γ →
+          lam α β γ δ = (x δ : ℝ) * (ζ α β γ : ℝ)) :
+    ∃ (u v w x : Fin n → ℝˣ),
+      ∀ α β γ δ, NotIdentical α β γ δ →
+        lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ) := by
+  classical
+  rcases hα with ⟨u, μ, hαeq⟩
+  rcases hβ with ⟨v, ν, hβeq⟩
+  rcases hγ with ⟨w, ξ, hγeq⟩
+  rcases hδ with ⟨x0, ζ, hδeq⟩
+  have _ : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ := hsupp
+  clear hsupp x0 ζ hδeq
+
+  have h0 : (0 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 0 < 5) hn
+  let i0 : Fin n := ⟨0, h0⟩
+
+  let ρ : Fin n → Fin n → ℝˣ := fun γ δ => (u i0)⁻¹ * ν i0 γ δ
+
+  have huvρ :
+      ∀ α β γ δ, γ ≠ δ →
+        lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (ρ γ δ : ℝ) := by
+    intro α β γ δ hgd
+    have hneqβ : NotAllEqual3 β γ δ := by
+      intro h
+      exact hgd h.2
+    have hneqi0 : NotAllEqual3 i0 γ δ := by
+      intro h
+      exact hgd h.2
+    have hμ :
+        (μ β γ δ : ℝ) = (v β : ℝ) * (ρ γ δ : ℝ) := by
+      have hcross :
+          (u i0 : ℝ) * (μ β γ δ : ℝ) = (v β : ℝ) * (ν i0 γ δ : ℝ) := by
+        calc
+          (u i0 : ℝ) * (μ β γ δ : ℝ) = lam i0 β γ δ := (hαeq i0 β γ δ hneqβ).symm
+          _ = (v β : ℝ) * (ν i0 γ δ : ℝ) := hβeq i0 β γ δ hneqi0
+      have hui0 : (u i0 : ℝ) ≠ 0 := (u i0).ne_zero
+      have hdiv :
+          (μ β γ δ : ℝ) = ((v β : ℝ) * (ν i0 γ δ : ℝ)) / (u i0 : ℝ) := by
+        exact (eq_div_iff hui0).2 (by simpa [mul_assoc, mul_left_comm, mul_comm] using hcross)
+      simpa [ρ, div_eq_mul_inv, mul_assoc, mul_left_comm, mul_comm] using hdiv
+    calc
+      lam α β γ δ = (u α : ℝ) * (μ β γ δ : ℝ) := hαeq α β γ δ hneqβ
+      _ = (u α : ℝ) * ((v β : ℝ) * (ρ γ δ : ℝ)) := by rw [hμ]
+      _ = (u α : ℝ) * (v β : ℝ) * (ρ γ δ : ℝ) := by ring
+
+  let aPick : Fin n → Fin n := fun δ => Classical.choose (exists_fin_ne_of_five hn δ)
+  have haPick : ∀ δ : Fin n, aPick δ ≠ δ := by
+    intro δ
+    exact Classical.choose_spec (exists_fin_ne_of_five hn δ)
+
+  let x : Fin n → ℝˣ := fun δ => ((u (aPick δ)) * (v δ))⁻¹ * ξ (aPick δ) δ δ
+
+  have hfull_ne :
+      ∀ α β γ δ, γ ≠ δ →
+        lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ) := by
+    intro α β γ δ hgd
+    have hnePick : NotAllEqual3 (aPick δ) δ δ := by
+      intro h
+      exact haPick δ h.1
+    have hγpick :
+        lam (aPick δ) δ γ δ = (w γ : ℝ) * (ξ (aPick δ) δ δ : ℝ) :=
+      hγeq (aPick δ) δ γ δ hnePick
+    have huvρ_pick :
+        lam (aPick δ) δ γ δ = (u (aPick δ) : ℝ) * (v δ : ℝ) * (ρ γ δ : ℝ) :=
+      huvρ (aPick δ) δ γ δ hgd
+    have hρ :
+        (ρ γ δ : ℝ) = (w γ : ℝ) * (x δ : ℝ) := by
+      have huvv_ne : ((u (aPick δ) : ℝ) * (v δ : ℝ)) ≠ 0 := by
+        exact mul_ne_zero (u (aPick δ)).ne_zero (v δ).ne_zero
+      have hmult :
+          ((u (aPick δ) : ℝ) * (v δ : ℝ)) * (ρ γ δ : ℝ) =
+            (w γ : ℝ) * (ξ (aPick δ) δ δ : ℝ) := by
+        calc
+          ((u (aPick δ) : ℝ) * (v δ : ℝ)) * (ρ γ δ : ℝ)
+              = lam (aPick δ) δ γ δ := by simpa [mul_assoc] using huvρ_pick.symm
+          _ = (w γ : ℝ) * (ξ (aPick δ) δ δ : ℝ) := hγpick
+      have hscaled := congrArg (fun t => (((u (aPick δ) : ℝ) * (v δ : ℝ))⁻¹) * t) hmult
+      simpa [x, mul_assoc, mul_left_comm, mul_comm, huvv_ne] using hscaled
+    calc
+      lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (ρ γ δ : ℝ) := huvρ α β γ δ hgd
+      _ = (u α : ℝ) * (v β : ℝ) * ((w γ : ℝ) * (x δ : ℝ)) := by rw [hρ]
+      _ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ) := by ring
+
+  refine ⟨u, v, w, x, ?_⟩
+  intro α β γ δ hni
+  by_cases hgd : γ = δ
+  · subst hgd
+    have hneqαβγ : NotAllEqual3 α β γ := by
+      intro h
+      exact hni ⟨h.1, h.2, rfl⟩
+    let η : Fin n := aPick γ
+    have hηne : η ≠ γ := haPick γ
+    have hfactη :
+        lam α β η γ = (u α : ℝ) * (v β : ℝ) * (w η : ℝ) * (x γ : ℝ) :=
+      hfull_ne α β η γ hηne
+    have hγη : lam α β η γ = (w η : ℝ) * (ξ α β γ : ℝ) :=
+      hγeq α β η γ hneqαβγ
+    have hξ :
+        (ξ α β γ : ℝ) = (u α : ℝ) * (v β : ℝ) * (x γ : ℝ) := by
+      have hwη : (w η : ℝ) ≠ 0 := (w η).ne_zero
+      apply (mul_left_cancel₀ hwη)
+      calc
+        (w η : ℝ) * (ξ α β γ : ℝ) = lam α β η γ := hγη.symm
+        _ = (u α : ℝ) * (v β : ℝ) * (w η : ℝ) * (x γ : ℝ) := hfactη
+        _ = (w η : ℝ) * ((u α : ℝ) * (v β : ℝ) * (x γ : ℝ)) := by ring
+    have hγdiag : lam α β γ γ = (w γ : ℝ) * (ξ α β γ : ℝ) :=
+      hγeq α β γ γ hneqαβγ
+    calc
+      lam α β γ γ = (w γ : ℝ) * (ξ α β γ : ℝ) := hγdiag
+      _ = (w γ : ℝ) * ((u α : ℝ) * (v β : ℝ) * (x γ : ℝ)) := by rw [hξ]
+      _ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x γ : ℝ) := by ring
+  · exact hfull_ne α β γ δ hgd
+
+theorem reverse_direction_core {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4)
+    (hgen : GenericCameras A) (lam : Lambda n)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
+    ∃ (u v w x : Fin n → ℝˣ),
+      ∀ α β γ δ, NotIdentical α β γ δ →
+        lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ) := by
+  classical
+  -- Extract the four partial separations (one per unfolding mode).
+  have hα : ∃ (u : Fin n → ℝˣ) (μ : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ α β γ δ, NotAllEqual3 β γ δ →
+        lam α β γ δ = (u α : ℝ) * (μ β γ δ : ℝ) :=
+    separate_alpha_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp)
+      (hrank := hrank)
+
+  have hβ : ∃ (v : Fin n → ℝˣ) (ν : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ α β γ δ, NotAllEqual3 α γ δ →
+        lam α β γ δ = (v β : ℝ) * (ν α γ δ : ℝ) :=
+    separate_beta_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp)
+      (hrank := hrank)
+
+  have hγ : ∃ (w : Fin n → ℝˣ) (ξ : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ α β γ δ, NotAllEqual3 α β δ →
+        lam α β γ δ = (w γ : ℝ) * (ξ α β δ : ℝ) :=
+    separate_gamma_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp)
+      (hrank := hrank)
+
+  have hδ : ∃ (x : Fin n → ℝˣ) (ζ : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ α β γ δ, NotAllEqual3 α β γ →
+        lam α β γ δ = (x δ : ℝ) * (ζ α β γ : ℝ) :=
+    separate_delta_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp)
+      (hrank := hrank)
+
+  -- Patch the separations into the full `u⊗v⊗w⊗x` factorization.
+  exact full_factorization_of_separations (hn := hn) (lam := lam) (hsupp := hsupp)
+    (hα := hα) (hβ := hβ) (hγ := hγ) (hδ := hδ)
+
 theorem reverse_direction {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4)
     (hgen : GenericCameras A) (lam : Lambda n)
     (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
@@ -1156,441 +1659,427 @@ theorem reverse_direction {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4)
         lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ)
     := by
   classical
-  rcases hgen with ⟨hstack, hcam, hspan1, hspan2, hspan3⟩
-
-  -- Convert `IsZeroVec` to the statement that all `5×5` minors vanish, hence each unfolding has rank ≤ 4.
+  -- Step 0: derive the "all 5×5 minors vanish" statement and hence rank bounds for each unfolding.
   have hminors :
       ∀ (m : Fin 4) (rows : Fin 5 → RowIdx n) (cols : Fin 5 → ColIdx n),
         Matrix.det ((Unfold m (scaleQ lam (constructQ A))).submatrix rows cols) = 0 := by
-    have := (isZeroVec_iff_minors_vanish (Qf := scaleQ lam (constructQ A))).1 hvanish
-    intro m rows cols
-    exact this m rows cols
-  have hrank0 : (Unfold 0 (scaleQ lam (constructQ A))).rank ≤ 4 :=
-    minors5x5_zero_imp_rank_le_four (M := Unfold 0 (scaleQ lam (constructQ A)))
-      (fun rows cols => hminors 0 rows cols)
-  have hrank1 : (Unfold 1 (scaleQ lam (constructQ A))).rank ≤ 4 :=
-    minors5x5_zero_imp_rank_le_four (M := Unfold 1 (scaleQ lam (constructQ A)))
-      (fun rows cols => hminors 1 rows cols)
-  have hrank2 : (Unfold 2 (scaleQ lam (constructQ A))).rank ≤ 4 :=
-    minors5x5_zero_imp_rank_le_four (M := Unfold 2 (scaleQ lam (constructQ A)))
-      (fun rows cols => hminors 2 rows cols)
+    -- `IsZeroVec (eval F T)` is definitionally the statement that every 5×5 minor determinant is 0.
+    exact (isZeroVec_iff_minors_vanish (Qf := scaleQ lam (constructQ A))).1 hvanish
 
-  -- The 4D space `W = col(StackedMat A)`.
-  let W : Submodule ℝ (RowIdx n → ℝ) := ColSpan (StackedMat A)
-  have hrangeB :
-      LinearMap.range (Matrix.mulVecLin (StackedMat A)) = W := by
-    simpa [W, ColSpan] using (Matrix.range_mulVecLin (A := StackedMat A))
+  have hrank :
+      ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4 := by
+    intro m
+    refine minors5x5_zero_imp_rank_le_four (M := Unfold m (scaleQ lam (constructQ A))) ?_
+    intro rows cols
+    exact hminors m rows cols
 
-  -- Column spans of the generic 27-column submatrices equal `W`.
-  have hcolSub1 :
-      ∀ β γ δ : Fin n, NotAllEqual3 β γ δ → ColSpan (Submatrix1 A β γ δ) = W := by
-    intro β γ δ hneq
-    -- Inclusion `col(Submatrix1) ≤ W` (columns are in `col(Unfold0 Q) ≤ col(StackedMat)`).
-    have hle1 : ColSpan (Submatrix1 A β γ δ) ≤ ColSpan (Unfold 0 (constructQ A)) := by
-      refine Submodule.span_le.2 ?_
-      rintro _ ⟨j, rfl⟩
-      refine Submodule.subset_span (s := Set.range (Unfold 0 (constructQ A)).col) ?_
-      refine ⟨colFun0 β γ δ j, ?_⟩
-      ext p
-      simp [Submatrix1, colFun0, Matrix.col, Matrix.submatrix]
-    have hle2 : ColSpan (Unfold 0 (constructQ A)) ≤ W := by
-      -- `Unfold 0 (constructQ A) = StackedMat A * cofactorMat A 0`
-      have : Unfold 0 (constructQ A) = StackedMat A * cofactorMat A 0 := unfold_constructQ_eq_mul A 0
-      simpa [W, this] using (ColSpan_mul_le_left (B := StackedMat A) (C := cofactorMat A 0))
-    have hle : ColSpan (Submatrix1 A β γ δ) ≤ W := hle1.trans hle2
+  exact reverse_direction_core (hn := hn) (A := A) (hgen := hgen) (lam := lam)
+    (hsupp := hsupp) (hrank := hrank)
 
-    -- Finrank computations: both sides have finrank 4, so inclusion is equality.
-    have hS' :
-        (Submatrix1 A β γ δ).rank = Module.finrank ℝ (ColSpan (Submatrix1 A β γ δ)) := by
-      simpa [ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := Submatrix1 A β γ δ))
-    have hW' : (StackedMat A).rank = Module.finrank ℝ W := by
-      simpa [W, ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := StackedMat A))
-    have hfinS : Module.finrank ℝ (ColSpan (Submatrix1 A β γ δ)) = 4 := by
-      have hrankS : (Submatrix1 A β γ δ).rank = 4 := hspan1 β γ δ hneq
-      simpa [hS'] using hrankS
-    have hfinW : Module.finrank ℝ W = 4 := by
-      simpa [hW'] using hstack
-    have hfinEq :
-        Module.finrank ℝ (ColSpan (Submatrix1 A β γ δ)) = Module.finrank ℝ W := by
-      simpa [hfinS, hfinW]
-    exact Submodule.eq_of_le_of_finrank_eq hle hfinEq
 
-  have hcolSub2 :
-      ∀ α γ δ : Fin n, NotAllEqual3 α γ δ → ColSpan (Submatrix2 A α γ δ) = W := by
-    intro α γ δ hneq
-    have hle1 : ColSpan (Submatrix2 A α γ δ) ≤ ColSpan (Unfold 1 (constructQ A)) := by
-      refine Submodule.span_le.2 ?_
-      rintro _ ⟨j, rfl⟩
-      refine Submodule.subset_span (s := Set.range (Unfold 1 (constructQ A)).col) ?_
-      refine ⟨colFun1 α γ δ j, ?_⟩
-      ext p
-      simp [Submatrix2, colFun1, Matrix.col, Matrix.submatrix]
-    have hle2 : ColSpan (Unfold 1 (constructQ A)) ≤ W := by
-      have : Unfold 1 (constructQ A) = StackedMat A * cofactorMat A 1 := unfold_constructQ_eq_mul A 1
-      simpa [W, this] using (ColSpan_mul_le_left (B := StackedMat A) (C := cofactorMat A 1))
-    have hle : ColSpan (Submatrix2 A α γ δ) ≤ W := hle1.trans hle2
+noncomputable section AristotleLemmas
 
-    have hS' :
-        (Submatrix2 A α γ δ).rank = Module.finrank ℝ (ColSpan (Submatrix2 A α γ δ)) := by
-      simpa [ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := Submatrix2 A α γ δ))
-    have hW' : (StackedMat A).rank = Module.finrank ℝ W := by
-      simpa [W, ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := StackedMat A))
-    have hfinS : Module.finrank ℝ (ColSpan (Submatrix2 A α γ δ)) = 4 := by
-      have hrankS : (Submatrix2 A α γ δ).rank = 4 := hspan2 α γ δ hneq
-      simpa [hS'] using hrankS
-    have hfinW : Module.finrank ℝ W = 4 := by
-      simpa [hW'] using hstack
-    have hfinEq :
-        Module.finrank ℝ (ColSpan (Submatrix2 A α γ δ)) = Module.finrank ℝ W := by
-      simpa [hfinS, hfinW]
-    exact Submodule.eq_of_le_of_finrank_eq hle hfinEq
+def witnessA (n : ℕ) : Fin n → Matrix3x4 :=
+  fun α => Matrix.of ![![1, 0, 0, 0], ![0, 1, 0, 0], ![0, 0, 1, (α : ℝ)]]
 
-  have hcolSub3 :
-      ∀ α β δ : Fin n, NotAllEqual3 α β δ → ColSpan (Submatrix3 A α β δ) = W := by
-    intro α β δ hneq
-    have hle1 : ColSpan (Submatrix3 A α β δ) ≤ ColSpan (Unfold 2 (constructQ A)) := by
-      refine Submodule.span_le.2 ?_
-      rintro _ ⟨j, rfl⟩
-      refine Submodule.subset_span (s := Set.range (Unfold 2 (constructQ A)).col) ?_
-      refine ⟨colFun2 α β δ j, ?_⟩
-      ext p
-      simp [Submatrix3, colFun2, Matrix.col, Matrix.submatrix]
-    have hle2 : ColSpan (Unfold 2 (constructQ A)) ≤ W := by
-      have : Unfold 2 (constructQ A) = StackedMat A * cofactorMat A 2 := unfold_constructQ_eq_mul A 2
-      simpa [W, this] using (ColSpan_mul_le_left (B := StackedMat A) (C := cofactorMat A 2))
-    have hle : ColSpan (Submatrix3 A α β δ) ≤ W := hle1.trans hle2
+lemma witnessA_properties {n : ℕ} (hn : 5 ≤ n) :
+    RankGenericCameras (witnessA n) := by
+  classical
+  refine ⟨?_, ?_⟩
 
-    have hS' :
-        (Submatrix3 A α β δ).rank = Module.finrank ℝ (ColSpan (Submatrix3 A α β δ)) := by
-      simpa [ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := Submatrix3 A α β δ))
-    have hW' : (StackedMat A).rank = Module.finrank ℝ W := by
-      simpa [W, ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := StackedMat A))
-    have hfinS : Module.finrank ℝ (ColSpan (Submatrix3 A α β δ)) = 4 := by
-      have hrankS : (Submatrix3 A α β δ).rank = 4 := hspan3 α β δ hneq
-      simpa [hS'] using hrankS
-    have hfinW : Module.finrank ℝ W = 4 := by
-      simpa [hW'] using hstack
-    have hfinEq :
-        Module.finrank ℝ (ColSpan (Submatrix3 A α β δ)) = Module.finrank ℝ W := by
-      simpa [hfinS, hfinW]
-    exact Submodule.eq_of_le_of_finrank_eq hle hfinEq
+  · -- `rank (StackedMat (witnessA n)) = 4` by showing the four columns are independent.
+    -- We do this via row-independence of the transpose.
+    have h0 : (0 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 0 < 5) hn
+    have h1 : (1 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 1 < 5) hn
+    let a0 : Fin n := ⟨0, h0⟩
+    let a1 : Fin n := ⟨1, h1⟩
 
-  -- Some fixed indices `0,1,2 ∈ Fin n` (available since `n ≥ 5`).
-  have h0 : (0 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 0 < 5) hn
-  have h1 : (1 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 1 < 5) hn
-  have h2 : (2 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 2 < 5) hn
-  let i0 : Fin n := ⟨0, h0⟩
-  let i1 : Fin n := ⟨1, h1⟩
-  let i2 : Fin n := ⟨2, h2⟩
-  have h01 : i0 ≠ i1 := by decide
-  have h12 : i1 ≠ i2 := by decide
-  have hNotAll012 : NotAllEqual3 i0 i1 i2 := by
-    intro h; exact h01 h.1
+    have hLI :
+        LinearIndependent ℝ (fun i : Fin 4 => (StackedMat (witnessA n))ᵀ.row i) := by
+      -- Use the finite-index characterization.
+      refine (Fintype.linearIndependent_iff).2 ?_
+      intro g hg i
+      -- Evaluate the vector equation at carefully chosen coordinates.
+      -- The resulting scalar equations isolate each coefficient of `g`.
+      have h_at (p : RowIdx n) :
+          (∑ k : Fin 4, g k • (StackedMat (witnessA n))ᵀ.row k) p = 0 := by
+        simpa using congrArg (fun v => v p) hg
 
-  -- Basic nonvanishing facts from the support condition.
-  have h0012 : lam i0 i0 i1 i2 ≠ 0 := by
-    have hni : NotIdentical i0 i0 i1 i2 := by
-      intro h; exact h01 h.2.1
-    exact (hsupp _ _ _ _).2 hni
-  have h0112 : lam i0 i1 i1 i2 ≠ 0 := by
-    have hni : NotIdentical i0 i1 i1 i2 := by
-      intro h; exact h12 h.2.2
-    exact (hsupp _ _ _ _).2 hni
-  have h0102 : lam i0 i1 i0 i2 ≠ 0 := by
-    have hni : NotIdentical i0 i1 i0 i2 := by
-      intro h; exact h01 h.1
-    exact (hsupp _ _ _ _).2 hni
+      -- `g 0 = 0` from row `(a0,0)`.
+      have hg0 : g 0 = 0 := by
+        have h := h_at (a0, 0)
+        have h' : (∑ x : Fin 4, g x * (![1, 0, 0, 0] x : ℝ)) = 0 := by
+          -- Row `(a0,0)` is `[1,0,0,0]`.
+          simpa [StackedMat, witnessA, a0, Matrix.row_apply, Matrix.transpose_apply, Pi.smul_apply]
+            using h
+        have h'' :
+            g 0 * (1 : ℝ) + g 1 * (0 : ℝ) + g 2 * (0 : ℝ) + g 3 * (0 : ℝ) = 0 := by
+          simpa [Fin.sum_univ_four] using h'
+        simpa using h''
 
-  -- Define the factor functions as units.
-  let u : Fin n → ℝˣ :=
-    fun α =>
-      Units.mk0 (lam α i0 i1 i2 / lam i0 i0 i1 i2) (by
-        have hnum : lam α i0 i1 i2 ≠ 0 := by
-          have hni : NotIdentical α i0 i1 i2 := by
-            intro h; exact h01 h.2.1
-          exact (hsupp _ _ _ _).2 hni
-        exact div_ne_zero hnum h0012)
-  let v : Fin n → ℝˣ :=
-    fun β =>
-      Units.mk0 (lam i0 β i1 i2 / lam i0 i1 i1 i2) (by
-        have hnum : lam i0 β i1 i2 ≠ 0 := by
-          have hni : NotIdentical i0 β i1 i2 := by
-            intro h; exact h12 h.2.2
-          exact (hsupp _ _ _ _).2 hni
-        exact div_ne_zero hnum h0112)
-  let w : Fin n → ℝˣ :=
-    fun γ =>
-      Units.mk0 (lam i0 i1 γ i2) (by
-        have hni : NotIdentical i0 i1 γ i2 := by
-          intro h; exact h01 h.1
-        exact (hsupp _ _ _ _).2 hni)
-  let x : Fin n → ℝˣ :=
-    fun δ =>
-      Units.mk0 (lam i0 i1 i0 δ / lam i0 i1 i0 i2) (by
-        have hnum : lam i0 i1 i0 δ ≠ 0 := by
-          have hni : NotIdentical i0 i1 i0 δ := by
-            intro h; exact h01 h.1
-          exact (hsupp _ _ _ _).2 hni
-        exact div_ne_zero hnum h0102)
+      -- `g 1 = 0` from row `(a0,1)`.
+      have hg1 : g 1 = 0 := by
+        have h := h_at (a0, 1)
+        have h' : (∑ x : Fin 4, g x * (![0, 1, 0, 0] x : ℝ)) = 0 := by
+          -- Row `(a0,1)` is `[0,1,0,0]`.
+          simpa [StackedMat, witnessA, a0, Matrix.row_apply, Matrix.transpose_apply, Pi.smul_apply]
+            using h
+        have h'' :
+            g 0 * (0 : ℝ) + g 1 * (1 : ℝ) + g 2 * (0 : ℝ) + g 3 * (0 : ℝ) = 0 := by
+          simpa [Fin.sum_univ_four] using h'
+        simpa using h''
 
-  -- Mode 0 (separating α): for not-all-equal triples `(β,γ,δ)`, we have
-  --   λ_{αβγδ} = u_α * λ_{0βγδ}.
-  have mode0_formula :
-      ∀ β γ δ : Fin n, NotAllEqual3 β γ δ → ∀ α : Fin n,
-        lam α β γ δ = (u α : ℝ) * lam i0 β γ δ := by
-    intro β γ δ hneq α
-    -- Column space identity for the scaled unfolding in mode 0.
-    let T : QFamily n := scaleQ lam (constructQ A)
-    let D : Matrix (RowIdx n) (RowIdx n) ℝ := BlockDiagonal (fun a => lam a β γ δ)
-    let Dref : Matrix (RowIdx n) (RowIdx n) ℝ := BlockDiagonal (fun a => lam a i0 i1 i2)
-    have hsD : ∀ a : Fin n, lam a β γ δ ≠ 0 := by
-      intro a
-      have hni : NotIdentical a β γ δ := notIdentical_of_notAllEqual3₀ (n := n) (β := β) (γ := γ)
-        (δ := δ) hneq a
-      exact (hsupp _ _ _ _).2 hni
-    have hsDref : ∀ a : Fin n, lam a i0 i1 i2 ≠ 0 := by
-      intro a
-      have hni : NotIdentical a i0 i1 i2 := notIdentical_of_notAllEqual3₀ (n := n) (β := i0) (γ := i1)
-        (δ := i2) hNotAll012 a
-      exact (hsupp _ _ _ _).2 hni
-    -- `col(Unfold0 T) = D(W)`.
-    have hcol :
-        ColSpan (Unfold 0 T) = Submodule.map (Matrix.mulVecLin D) W := by
-      -- Use the 27-column submatrix corresponding to `(β,γ,δ)`.
-      let S : Matrix (RowIdx n) Triple3 ℝ := (Unfold 0 T).submatrix id (colFun0 β γ δ)
-      have hSdef : S = D * Submatrix1 A β γ δ := by
-        ext p j
-        simp [S, D, Submatrix1, BlockDiagonal_mul_apply, colFun0, Unfold, scaleQ, Submatrix1]
-      have hrankS : S.rank = 4 := by
-        have hunit : IsUnit D.det := BlockDiagonal_isUnit_det (n := n) (s := fun a => lam a β γ δ) hsD
-        have hmul :
-            (D * Submatrix1 A β γ δ).rank = (Submatrix1 A β γ δ).rank := by
-          simpa using
-            (Matrix.rank_mul_eq_right_of_isUnit_det (A := D) (B := Submatrix1 A β γ δ) hunit)
-        have hsub : (Submatrix1 A β γ δ).rank = 4 := hspan1 β γ δ hneq
-        simpa [hSdef, hmul] using hsub
-      have hcols :
-          ∀ j : Triple3, ∃ i : ColIdx n, S.col j = (Unfold 0 T).col i := by
-        intro j
-        refine ⟨colFun0 β γ δ j, ?_⟩
-        ext p
-        simp [S, colFun0, Matrix.col, Matrix.submatrix]
-      have hcolEq :
-          ColSpan S = ColSpan (Unfold 0 T) :=
-        colSpan_eq_of_cols_subtype_and_rank (M := Unfold 0 T) (S := S) hcols hrank0 hrankS
-      have hcolS :
-          ColSpan S = Submodule.map (Matrix.mulVecLin D) W := by
-        -- `col(S) = D(col(Submatrix1)) = D(W)`.
-        calc
-          ColSpan S = ColSpan (D * Submatrix1 A β γ δ) := by simpa [hSdef]
-          _ = Submodule.map (Matrix.mulVecLin D) (ColSpan (Submatrix1 A β γ δ)) := by
-                simpa using (ColSpan_mul_left (D := D) (M := Submatrix1 A β γ δ))
-          _ = Submodule.map (Matrix.mulVecLin D) W := by
-                simpa [hcolSub1 β γ δ hneq]
-      -- `ColSpan (Unfold 0 T) = map(D) W`.
-      exact hcolEq.symm.trans hcolS
-    -- The same identity for the reference triple `(0,1,2)`.
-    have hcol_ref :
-        ColSpan (Unfold 0 T) = Submodule.map (Matrix.mulVecLin Dref) W := by
-      let S : Matrix (RowIdx n) Triple3 ℝ := (Unfold 0 T).submatrix id (colFun0 i0 i1 i2)
-      have hSdef : S = Dref * Submatrix1 A i0 i1 i2 := by
-        ext p j
-        simp [S, Dref, Submatrix1, BlockDiagonal_mul_apply, colFun0, Unfold, scaleQ, Submatrix1]
-      have hrankS : S.rank = 4 := by
-        have hunit : IsUnit Dref.det :=
-          BlockDiagonal_isUnit_det (n := n) (s := fun a => lam a i0 i1 i2) hsDref
-        have hmul :
-            (Dref * Submatrix1 A i0 i1 i2).rank = (Submatrix1 A i0 i1 i2).rank := by
-          simpa using
-            (Matrix.rank_mul_eq_right_of_isUnit_det (A := Dref) (B := Submatrix1 A i0 i1 i2) hunit)
-        have hsub : (Submatrix1 A i0 i1 i2).rank = 4 := hspan1 i0 i1 i2 hNotAll012
-        simpa [hSdef, hmul] using hsub
-      have hcols :
-          ∀ j : Triple3, ∃ i : ColIdx n, S.col j = (Unfold 0 T).col i := by
-        intro j
-        refine ⟨colFun0 i0 i1 i2 j, ?_⟩
-        ext p
-        simp [S, colFun0, Matrix.col, Matrix.submatrix]
-      have hcolEq :
-          ColSpan S = ColSpan (Unfold 0 T) :=
-        colSpan_eq_of_cols_subtype_and_rank (M := Unfold 0 T) (S := S) hcols hrank0 hrankS
-      have hcolS :
-          ColSpan S = Submodule.map (Matrix.mulVecLin Dref) W := by
-        calc
-          ColSpan S = ColSpan (Dref * Submatrix1 A i0 i1 i2) := by simpa [hSdef]
-          _ = Submodule.map (Matrix.mulVecLin Dref) (ColSpan (Submatrix1 A i0 i1 i2)) := by
-                simpa using (ColSpan_mul_left (D := Dref) (M := Submatrix1 A i0 i1 i2))
-          _ = Submodule.map (Matrix.mulVecLin Dref) W := by
-                simpa [hcolSub1 i0 i1 i2 hNotAll012]
-      exact hcolEq.symm.trans hcolS
-    have hmapEq : Submodule.map (Matrix.mulVecLin D) W = Submodule.map (Matrix.mulVecLin Dref) W :=
-      hcol.symm.trans hcol_ref
+      -- `g 2 = 0` and then `g 3 = 0` from rows `(a0,2)` and `(a1,2)`.
+      have hg2 : g 2 = 0 := by
+        have h := h_at (a0, 2)
+        have h' : (∑ x : Fin 4, g x * (![0, 0, 1, (a0 : ℝ)] x : ℝ)) = 0 := by
+          -- Row `(a0,2)` is `[0,0,1,(a0:ℝ)]`.
+          simpa [StackedMat, witnessA, Matrix.row_apply, Matrix.transpose_apply, Pi.smul_apply]
+            using h
+        have h'' : g 2 + g 3 * (a0 : ℝ) = 0 := by
+          -- Expand the sum; only indices `2` and `3` survive.
+          simpa [Fin.sum_univ_four, mul_add, add_mul, add_assoc, add_left_comm, add_comm] using h'
+        -- `a0 = 0`, so `g 3 * a0 = 0`.
+        simpa [a0] using h''
 
-    -- Stabilization hypothesis for the ratio matrix.
-    let s : Fin n → ℝ := fun a => lam a i0 i1 i2 / lam a β γ δ
-    have hstab :
-        ∀ x : Fin 4 → ℝ, ∃ y : Fin 4 → ℝ,
-          Matrix.mulVec (BlockDiagonal s) (Matrix.mulVec (StackedMat A) x) =
-            Matrix.mulVec (StackedMat A) y := by
-      intro x
-      -- `B*x ∈ W`.
-      have hxW : Matrix.mulVec (StackedMat A) x ∈ W := by
-        have : Matrix.mulVecLin (StackedMat A) x ∈ LinearMap.range (Matrix.mulVecLin (StackedMat A)) :=
-          ⟨x, by simp [Matrix.mulVecLin_apply]⟩
-        simpa [hrangeB] using this
-      -- Apply the map equality to see `Dref*(B*x) ∈ map(D) W`.
-      have hxMapRef :
-          Matrix.mulVec Dref (Matrix.mulVec (StackedMat A) x) ∈ Submodule.map (Matrix.mulVecLin Dref) W := by
-        refine ⟨Matrix.mulVec (StackedMat A) x, hxW, ?_⟩
-        simp [Matrix.mulVecLin_apply]
-      have hxMap :
-          Matrix.mulVec Dref (Matrix.mulVec (StackedMat A) x) ∈ Submodule.map (Matrix.mulVecLin D) W := by
-        simpa [hmapEq.symm] using hxMapRef
-      rcases hxMap with ⟨z, hzW, hzEq⟩
-      -- `z ∈ W`, hence `z = B*y` for some `y`.
-      have hzRange : z ∈ LinearMap.range (Matrix.mulVecLin (StackedMat A)) := by
-        simpa [hrangeB] using hzW
-      rcases hzRange with ⟨y, rfl⟩
-      -- We have `D * (B*y) = Dref * (B*x)`.
-      have hDz :
-          Matrix.mulVec D (Matrix.mulVec (StackedMat A) y) =
-            Matrix.mulVec Dref (Matrix.mulVec (StackedMat A) x) := by
-        simpa [Matrix.mulVecLin_apply] using hzEq.symm
-      -- Left-multiply by `inv(D)` (explicitly, since `D` is diagonal with nonzero diagonal entries).
-      let invD : Matrix (RowIdx n) (RowIdx n) ℝ := BlockDiagonal (fun a => (lam a β γ δ)⁻¹)
-      have hinv : invD * D = 1 := by
-        ext p q
-        by_cases h : p = q
-        · subst h
-          simp [invD, D, BlockDiagonal, hsD]
-        · simp [invD, D, BlockDiagonal, h]
-      have hratio : invD * Dref = BlockDiagonal s := by
-        ext p q
-        by_cases h : p = q
-        · subst h
-          simp [invD, Dref, s, BlockDiagonal, hsD]
-        · simp [invD, Dref, BlockDiagonal, h]
-      have := congrArg (fun v => Matrix.mulVec invD v) hDz
-      -- Simplify to the desired stabilization equation.
-      refine ⟨y, ?_⟩
-      -- `invD * (D * (B*y)) = (invD*D) * (B*y) = B*y`, and similarly for the RHS.
-      simpa [mulVec_mulVec, hinv, hratio, Matrix.one_mulVec, Matrix.mulVecLin_apply, mul_assoc] using this.symm
+      have hg3 : g 3 = 0 := by
+        have h := h_at (a1, 2)
+        have h' : (∑ x : Fin 4, g x * (![0, 0, 1, (a1 : ℝ)] x : ℝ)) = 0 := by
+          simpa [StackedMat, witnessA, Matrix.row_apply, Matrix.transpose_apply, Pi.smul_apply]
+            using h
+        have h'' : g 2 + g 3 * (a1 : ℝ) = 0 := by
+          simpa [Fin.sum_univ_four, mul_add, add_mul, add_assoc, add_left_comm, add_comm] using h'
+        have hmul : g 3 * (a1 : ℝ) = 0 := by
+          simpa [hg2, add_zero] using h''
+        have ha1 : (a1 : ℝ) ≠ 0 := by
+          simpa [a1] using (one_ne_zero : (1 : ℝ) ≠ 0)
+        exact (mul_eq_zero.mp hmul).resolve_right ha1
 
-    have hsconst : ∀ a b : Fin n, s a = s b :=
-      Lemma_4_2_Rigidity A s hstack hcam hstab
-    -- Compare `s α` with `s i0` to get the required ratio identity.
-    have hsα : s α = s i0 := hsconst α i0
-    have hsα' :
-        lam α i0 i1 i2 / lam α β γ δ = lam i0 i0 i1 i2 / lam i0 β γ δ := by
-      simpa [s] using hsα
-    -- Cross-multiply and solve for `lam α β γ δ`.
-    have hden : lam i0 β γ δ ≠ 0 := by
-      have hni : NotIdentical i0 β γ δ := notIdentical_of_notAllEqual3₀ (n := n) (β := β) (γ := γ)
-        (δ := δ) hneq i0
-      exact (hsupp _ _ _ _).2 hni
-    have hαβγδ : lam α β γ δ ≠ 0 :=
-      (hsupp _ _ _ _).2
-        (notIdentical_of_notAllEqual3₀ (n := n) (β := β) (γ := γ) (δ := δ) hneq α)
-    have hcross :
-        lam α i0 i1 i2 * lam i0 β γ δ = lam i0 i0 i1 i2 * lam α β γ δ := by
-      -- Clear denominators in `hsα'`.
-      have h := hsα'
-      field_simp [hαβγδ, hden] at h
-      simpa [mul_assoc, mul_left_comm, mul_comm] using h
-    have hsolve :
-        lam α β γ δ = (lam α i0 i1 i2 / lam i0 i0 i1 i2) * lam i0 β γ δ := by
-      -- Rearrange `hcross` as `b*c = a*d`, then divide by `c`.
-      have hbc :
-          lam α β γ δ * lam i0 i0 i1 i2 = lam α i0 i1 i2 * lam i0 β γ δ := by
-        calc
-          lam α β γ δ * lam i0 i0 i1 i2 = lam i0 i0 i1 i2 * lam α β γ δ := by
-            simp [mul_comm]
-          _ = lam α i0 i1 i2 * lam i0 β γ δ := by
-            simpa [mul_assoc, mul_left_comm, mul_comm] using hcross.symm
-      have hdiv :
-          lam α β γ δ =
-            (lam α i0 i1 i2 * lam i0 β γ δ) / lam i0 i0 i1 i2 := by
-        exact (eq_div_iff h0012).2 (by simpa [mul_assoc, mul_left_comm, mul_comm] using hbc)
-      -- `a*d/c = (a/c)*d`.
-      simpa [div_mul_eq_mul_div, mul_assoc, mul_left_comm, mul_comm] using hdiv
-    -- Finish: unfold `u`.
-    simpa [u, Units.val_mk0] using hsolve
+      fin_cases i <;> simp [hg0, hg1, hg2, hg3]
 
-  -- TODO: complete reverse direction proof
-  -- The remaining steps (mode 1 / mode 2 and propagation) are implemented below.
-  refine ⟨u, v, w, x, ?_⟩
-  intro α β γ δ hni
-  -- placeholder
-  sorry
+    have hrankT : (StackedMat (witnessA n))ᵀ.rank = 4 := by
+      simpa using (LinearIndependent.rank_matrix (R := ℝ) (M := (StackedMat (witnessA n))ᵀ) hLI)
+    simpa [Matrix.rank_transpose] using hrankT
 
--- ═══════════════════════════════════════════════════════════════
--- Genericity polynomial
--- ═══════════════════════════════════════════════════════════════
+  · intro α
+    -- Each camera `witnessA n α` has rank 3: its three rows are linearly independent.
+    have hLI :
+        LinearIndependent ℝ (fun i : Fin 3 => (witnessA n α).row i) := by
+      refine (Fintype.linearIndependent_iff).2 ?_
+      intro g hg i
+      have h_at (j : Fin 4) :
+          (∑ k : Fin 3, g k • (witnessA n α).row k) j = 0 := by
+        simpa using congrArg (fun v => v j) hg
 
--- Encode GenericCameras as non-vanishing of a polynomial
--- We construct a nonzero polynomial G whose non-vanishing implies GenericCameras
--- TODO: explicit genericity polynomial G as product of “sum of squares of minors”.
+      have hg0 : g 0 = 0 := by
+        have h := h_at 0
+        have h' :
+            (∑ x : Fin 3, g x *
+              (vecCons (1 : ℝ) (fun i => vecCons 0 (fun _ => 0) i) x)) = 0 := by
+          -- Column `0` of the three rows is `[1,0,0]`.
+          simpa [witnessA, Matrix.row_apply, Pi.smul_apply] using h
+        have h'' : g 0 * (1 : ℝ) + g 1 * (0 : ℝ) + g 2 * (0 : ℝ) = 0 := by
+          simpa [Fin.sum_univ_three] using h'
+        simpa using h''
+      have hg1 : g 1 = 0 := by
+        have h := h_at 1
+        have h' :
+            (∑ x : Fin 3, g x *
+              (vecCons (0 : ℝ) (fun i => vecCons 1 (fun _ => 0) i) x)) = 0 := by
+          -- Column `1` of the three rows is `[0,1,0]`.
+          simpa [witnessA, Matrix.row_apply, Pi.smul_apply] using h
+        have h'' : g 0 * (0 : ℝ) + g 1 * (1 : ℝ) + g 2 * (0 : ℝ) = 0 := by
+          simpa [Fin.sum_univ_three] using h'
+        simpa using h''
+      have hg2 : g 2 = 0 := by
+        have h := h_at 2
+        have h' :
+            (∑ x : Fin 3, g x *
+              (vecCons (0 : ℝ) (fun i => vecCons 0 (fun _ => 1) i) x)) = 0 := by
+          -- Column `2` of the three rows is `[0,0,1]`.
+          simpa [witnessA, Matrix.row_apply, Pi.smul_apply] using h
+        have h'' : g 0 * (0 : ℝ) + g 1 * (0 : ℝ) + g 2 * (1 : ℝ) = 0 := by
+          simpa [Fin.sum_univ_three] using h'
+        simpa using h''
 
-/- PROVIDED SOLUTION:
+      fin_cases i <;> simp [hg0, hg1, hg2]
+    simpa using (LinearIndependent.rank_matrix (R := ℝ) (M := witnessA n α) hLI)
 
-Goal:
-  For each `n ≥ 5`, construct a nonzero polynomial `G` in the camera entries such that
-  `G(A) ≠ 0 → GenericCameras A`.
-
-This is the standard “Zariski-generic = complement of a proper algebraic set” encoding:
-  each generic condition is a finite conjunction of statements of the form
-    “some determinant/minor is nonzero”,
-  and we combine them into a single polynomial by multiplying “sum-of-squares of minors”.
-
-Concrete construction pattern:
-1) Rank(StackedMat A) = 4.
-   Since `StackedMat A` has exactly 4 columns, it always has rank ≤ 4. So rank = 4 is equivalent to
-   “some 4×4 minor is nonzero”. Define
-     g_stack(A) := ∑_{rows : Fin 4 → RowIdx n} det((StackedMat A).submatrix rows id)^2.
-   Then `g_stack(A) ≠ 0` implies at least one 4×4 minor is nonzero, hence rank(StackedMat A) = 4.
-
-2) Each camera Aα has rank = 3.
-   Each `A α` is `3×4`, hence rank ≤ 3. Rank = 3 is equivalent to “some 3×3 minor is nonzero”.
-   Define for each α:
-     g_cam,α(A) := ∑_{cols : Fin 3 → Fin 4} det((A α).submatrix id cols)^2.
-   Then `g_cam,α(A) ≠ 0` implies rank(A α) = 3.
-
-3) Spanning conditions (G3_m) for the 27-column submatrices of each unfolding.
-   Each such submatrix has shape `3n × 27`. Under the already-known rank bound ≤ 4 for unfoldings
-   of `constructQ A`, “its columns span W” can be enforced by requiring rank = 4. Again, rank = 4
-   can be enforced by “some 4×4 minor is nonzero” on that `3n×27` submatrix.
-   For each mode m and each triple (not all equal), let `S(m,triple,A)` be that `3n×27` matrix.
-   Define:
-     g_span(m,triple,A) := ∑_{rows : Fin 4 → RowIdx n} ∑_{cols : Fin 4 → Fin 27}
-                             det((S(m,triple,A)).submatrix rows cols)^2.
-   Then `g_span(m,triple,A) ≠ 0` forces rank(S)=4, i.e. its columns span the 4D space W.
-
-4) Combine into one polynomial.
-   Let `G(A) := g_stack(A) * (∏α g_cam,α(A)) * (∏_{m,triple} g_span(m,triple,A))`.
-   This is a polynomial in the camera entries because:
-   - each matrix entry is a polynomial in camera entries,
-   - determinants of matrices with polynomial entries are polynomials,
-   - sums/products preserve polynomiality.
-
-5) Show `G ≠ 0`.
-   Provide a single explicit camera family `A₀` satisfying all generic conditions (as in
-   `proofdocs/solution.md`), then check `G(A₀) ≠ 0`. Any polynomial that evaluates to a nonzero real
-   at some point is not the zero polynomial. Hence `G ≠ 0`.
-
-6) Conclude:
-   If `evalCameraPolynomial G A ≠ 0`, then every factor above is nonzero, hence all the generic
-   properties hold, i.e. `GenericCameras A`.
-
-This is exactly the usual “finite intersection of nonempty Zariski-open sets is nonempty Zariski-open”
-argument, packaged into a single polynomial nonvanishing condition.
+/-
+Definitions for the genericity polynomial components:
+1. `mat_poly_stacked`: The stacked matrix with polynomial entries.
+2. `poly_minor_stacked`: Determinant of a 4x4 submatrix of the stacked matrix.
+3. `poly_sum_sq_stacked`: Sum of squares of all 4x4 minors of the stacked matrix.
+4. `mat_poly_cam`: The camera matrix `A α` with polynomial entries.
+5. `poly_minor_cam`: Determinant of a 3x3 submatrix of `A α`.
+6. `poly_sum_sq_cam`: Sum of squares of all 3x3 minors of `A α`.
+7. `total_genericity_poly`: The product of `poly_sum_sq_stacked` and all `poly_sum_sq_cam`.
 -/
+open Arxiv.«2602.05192»
+open Classical Matrix BigOperators
+
+def mat_poly_stacked (n : ℕ) : Matrix (RowIdx n) (Fin 4) (MvPolynomial (AIndex n) ℝ) :=
+  fun p k => MvPolynomial.X (p.1, p.2, k)
+
+def poly_minor_stacked (n : ℕ) (rows : Fin 4 → RowIdx n) : MvPolynomial (AIndex n) ℝ :=
+  Matrix.det ((mat_poly_stacked n).submatrix rows id)
+
+def poly_sum_sq_stacked (n : ℕ) : MvPolynomial (AIndex n) ℝ :=
+  ∑ rows : Fin 4 → RowIdx n, (poly_minor_stacked n rows)^2
+
+def mat_poly_cam (n : ℕ) (α : Fin n) : Matrix (Fin 3) (Fin 4) (MvPolynomial (AIndex n) ℝ) :=
+  fun i j => MvPolynomial.X (α, i, j)
+
+def poly_minor_cam (n : ℕ) (α : Fin n) (cols : Fin 3 → Fin 4) : MvPolynomial (AIndex n) ℝ :=
+  Matrix.det ((mat_poly_cam n α).submatrix id cols)
+
+def poly_sum_sq_cam (n : ℕ) (α : Fin n) : MvPolynomial (AIndex n) ℝ :=
+  ∑ cols : Fin 3 → Fin 4, (poly_minor_cam n α cols)^2
+
+def total_genericity_poly (n : ℕ) : MvPolynomial (AIndex n) ℝ :=
+  (poly_sum_sq_stacked n) * (∏ α : Fin n, poly_sum_sq_cam n α)
+
+open Arxiv.«2602.05192»
+open Classical Matrix BigOperators
+
+lemma eval_poly_sum_sq_stacked_ne_zero {n : ℕ} (A : Fin n → Matrix3x4) :
+    evalCameraPolynomial (poly_sum_sq_stacked n) A ≠ 0 → (StackedMat A).rank = 4 := by
+      intro h_nonzero
+      have h_rank_ge_4 : (StackedMat A).rank ≥ 4 := by
+        -- Since `poly_sum_sq_stacked n` is nonzero, there exists a 4x4 minor of `StackedMat A` that is nonzero.
+        obtain ⟨rows, hrows⟩ : ∃ rows : Fin 4 → RowIdx n, Matrix.det (Matrix.submatrix (StackedMat A) rows id) ≠ 0 := by
+          contrapose! h_nonzero;
+          simp_all +decide [ Arxiv.«2602.05192».evalCameraPolynomial, Arxiv.«2602.05192».poly_sum_sq_stacked ];
+          refine Finset.sum_eq_zero fun x hx => ?_;
+          convert congr_arg ( · ^ 2 ) ( h_nonzero x ) using 1;
+          · unfold Arxiv.«2602.05192».poly_minor_stacked; simp +decide [ Matrix.det_apply' ] ;
+            unfold Arxiv.«2602.05192».mat_poly_stacked; aesop;
+          · norm_num;
+        have h_rank_ge_4 : Matrix.rank (Matrix.submatrix (StackedMat A) rows id) ≥ 4 := by
+          have := Matrix.rank_mul_le_left ( Matrix.submatrix ( StackedMat A ) rows id ) ( ( Matrix.submatrix ( StackedMat A ) rows id ) ⁻¹ ) ; simp_all +decide [ Matrix.nonsing_inv_apply_not_isUnit, isUnit_iff_ne_zero ] ;
+        -- Since the submatrix is a part of the original matrix, its rank is less than or equal to the rank of the original matrix.
+        have h_submatrix_rank_le : Matrix.rank (Matrix.submatrix (StackedMat A) rows id) ≤ Matrix.rank (StackedMat A) := by
+          have h_submatrix : ∃ P : Matrix (Fin 4) (RowIdx n) ℝ, ∃ Q : Matrix (Fin 4) (Fin 4) ℝ, Matrix.submatrix (StackedMat A) rows id = P * StackedMat A * Q := by
+            use Matrix.of (fun i j => if j = rows i then 1 else 0), 1;
+            ext i j; simp +decide [ Matrix.mul_apply ] ;
+            simp +decide [ Matrix.one_apply ]
+          obtain ⟨ P, Q, hPQ ⟩ := h_submatrix; rw [ hPQ ] ; exact Matrix.rank_mul_le_left _ _ |> le_trans <| Matrix.rank_mul_le_right _ _;
+        exact le_trans h_rank_ge_4 h_submatrix_rank_le
+      have h_rank_le_4 : (StackedMat A).rank ≤ 4 := by
+        exact le_trans ( Matrix.rank_le_card_width _ ) ( by simp +decide )
+      exact le_antisymm h_rank_le_4 h_rank_ge_4
+
+open Arxiv.«2602.05192»
+open Classical Matrix BigOperators
+
+lemma eval_poly_sum_sq_cam_ne_zero {n : ℕ} (A : Fin n → Matrix3x4) (α : Fin n) :
+    evalCameraPolynomial (poly_sum_sq_cam n α) A ≠ 0 → (A α).rank = 3 := by
+      intro h_nonzero
+      obtain ⟨cols, h_det⟩ : ∃ cols : Fin 3 → Fin 4, Matrix.det ((A α).submatrix id cols) ≠ 0 := by
+        simp_all +decide [ Arxiv.«2602.05192».evalCameraPolynomial, Arxiv.«2602.05192».poly_sum_sq_cam ];
+        contrapose! h_nonzero; simp_all +decide [ Arxiv.«2602.05192».poly_minor_cam ] ;
+        refine Finset.sum_eq_zero fun x hx => ?_ ; simp_all +decide [ Matrix.det_apply' ];
+        unfold Arxiv.«2602.05192».mat_poly_cam; aesop;
+      have h_rank_ge_3 : Matrix.rank (A α) ≥ 3 := by
+        have := Matrix.rank_mul_le ( A α ) ( Matrix.of ( fun i j => if i = cols j then 1 else 0 ) ) ; simp_all +decide [ Matrix.rank_transpose, Matrix.mul_apply ] ;
+        have h_rank_ge_3 : Matrix.rank (Matrix.submatrix (A α) id cols) = 3 := by
+          have := Matrix.rank_mul_le ( Matrix.submatrix ( A α ) id cols ) ( Matrix.submatrix ( A α ) id cols ) ⁻¹; simp_all +decide [ Matrix.nonsing_inv_apply_not_isUnit, isUnit_iff_ne_zero ] ;
+          exact le_antisymm ( le_trans ( Matrix.rank_le_card_width _ ) ( by norm_num ) ) this.1;
+        convert this.1 using 1;
+        convert h_rank_ge_3.symm using 2; ext i j; simp +decide [ Matrix.mul_apply ] ;
+      exact le_antisymm ( le_trans ( Matrix.rank_le_card_height _ ) ( by norm_num ) ) h_rank_ge_3
+
+open Arxiv.«2602.05192»
+open Classical Matrix BigOperators
+
+lemma rank_eq_four_imp_eval_stacked_ne_zero {n : ℕ} (A : Fin n → Matrix3x4) :
+    (StackedMat A).rank = 4 → evalCameraPolynomial (poly_sum_sq_stacked n) A ≠ 0 := by
+      intro h_rank h_eval_zero;
+      -- If the rank is 4, then there exists a 4x4 submatrix with a non-zero determinant.
+      obtain ⟨rows, h_det⟩ : ∃ rows : Fin 4 → RowIdx n, (Matrix.det (Matrix.submatrix (StackedMat A) rows id)) ≠ 0 := by
+        have h_det : ∃ rows : Fin 4 → RowIdx n, LinearIndependent ℝ (fun i => (StackedMat A).row (rows i)) := by
+          have h_det : ∃ rows : Fin 4 → RowIdx n, LinearIndependent ℝ (fun i => (StackedMat A).row (rows i)) := by
+            have h_rank : Module.finrank ℝ (Submodule.span ℝ (Set.range (StackedMat A).row)) = 4 := by
+              convert h_rank using 1;
+              exact Eq.symm (rank_eq_finrank_span_row (StackedMat A))
+            have := ( exists_linearIndependent ℝ ( Set.range ( StackedMat A |> Matrix.row ) ) );
+            obtain ⟨ b, hb₁, hb₂, hb₃ ⟩ := this;
+            have h_card : Set.ncard b = 4 := by
+              have h_card : Module.finrank ℝ (Submodule.span ℝ b) = 4 := by
+                rw [ hb₂, h_rank ];
+              have h_card : Module.finrank ℝ (Submodule.span ℝ b) = Set.ncard b := by
+                have h_finite : Set.Finite b := by
+                  exact Set.Finite.subset ( Set.toFinite ( Set.range ( StackedMat A |> Matrix.row ) ) ) hb₁
+                convert ( finrank_span_eq_card <| hb₃ );
+                all_goals norm_num [ Set.ncard_eq_toFinset_card' ];
+                convert Set.ncard_coe_finset ( h_finite.toFinset );
+                all_goals try { exact h_finite.fintype };
+                · aesop;
+                · rw [ Fintype.card_of_subtype ] ; aesop;
+              linarith;
+            obtain ⟨rows, hrows⟩ : ∃ rows : Fin 4 → (Fin 4 → ℝ), (∀ i, rows i ∈ b) ∧ LinearIndependent ℝ rows := by
+              have h_card : Nonempty (Fin 4 ≃ b) := by
+                have h_card : Fintype b := by
+                  exact Set.Finite.fintype ( Set.finite_of_ncard_pos ( by linarith ) );
+                exact ⟨ Fintype.equivOfCardEq <| by simp +decide [ Set.ncard_eq_toFinset_card' ] at *; linarith ⟩;
+              obtain ⟨ e ⟩ := h_card;
+              exact ⟨ _, fun i => e i |>.2, hb₃.comp _ e.injective ⟩;
+            choose f hf using fun i => hb₁ ( hrows.1 i );
+            exact ⟨ f, by simpa only [ hf ] using hrows.2 ⟩;
+          exact h_det;
+        obtain ⟨ rows, hrows ⟩ := h_det;
+        refine' ⟨ rows, _ ⟩;
+        rw [ Fintype.linearIndependent_iff ] at hrows;
+        contrapose! hrows;
+        obtain ⟨ g, hg ⟩ := Matrix.exists_vecMul_eq_zero_iff.mpr hrows;
+        exact ⟨ g, by simpa [ funext_iff, Matrix.vecMul, dotProduct ] using hg.2, Function.ne_iff.mp hg.1 ⟩;
+      -- Since the determinant of the submatrix is non-zero, the evaluation of the polynomial at A is also non-zero.
+      have h_eval_nonzero : evalCameraPolynomial (poly_minor_stacked n rows) A ≠ 0 := by
+        unfold Arxiv.«2602.05192».evalCameraPolynomial; simp_all +decide [ Matrix.det_apply' ] ;
+        unfold Arxiv.«2602.05192».poly_minor_stacked; simp_all +decide [ Matrix.det_apply' ] ;
+        convert h_det using 1;
+        unfold Arxiv.«2602.05192».mat_poly_stacked; simp +decide [ Arxiv.«2602.05192».StackedMat ] ;
+      -- Since the evaluation of the polynomial at A is zero, the sum of squares of all 4x4 minors must also be zero.
+      have h_sum_sq_zero : ∑ rows : Fin 4 → RowIdx n, (evalCameraPolynomial (poly_minor_stacked n rows) A)^2 = 0 := by
+        convert h_eval_zero using 1;
+        unfold Arxiv.«2602.05192».evalCameraPolynomial Arxiv.«2602.05192».poly_sum_sq_stacked; simp +decide [ sq, MvPolynomial.eval₂_sum ] ;
+      exact absurd h_sum_sq_zero ( ne_of_gt ( lt_of_lt_of_le ( by positivity ) ( Finset.single_le_sum ( fun x _ => sq_nonneg ( evalCameraPolynomial ( poly_minor_stacked n x ) A ) ) ( Finset.mem_univ rows ) ) ) )
+
+open Arxiv.«2602.05192»
+open Classical Matrix BigOperators
+
+lemma rank_lt_three_of_all_3x3_minors_zero (M : Matrix (Fin 3) (Fin 4) ℝ)
+    (h : ∀ cols : Fin 3 → Fin 4, (M.submatrix id cols).det = 0) :
+    M.rank < 3 := by
+      -- If `M.rank = 3`, then the column space has dimension 3.
+      by_contra h_contra
+      have h_col_space : Module.finrank ℝ (Submodule.span ℝ (Set.range M.col)) = 3 := by
+        rw [ show ( Submodule.span ℝ ( Set.range M.col ) ) = LinearMap.range M.mulVecLin from ?_ ];
+        · exact le_antisymm ( le_trans ( Submodule.finrank_le _ ) ( by norm_num ) ) ( not_lt.mp h_contra );
+        · exact Eq.symm (range_mulVecLin M);
+      -- Since the column space has dimension 3, there exists a subset of 3 columns that is linearly independent.
+      obtain ⟨cols, hcols⟩ : ∃ cols : Fin 3 → Fin 4, LinearIndependent ℝ (fun i : Fin 3 => M.col (cols i)) := by
+        have := ( exists_linearIndependent ℝ ( Set.range M.col ) );
+        obtain ⟨ b, hb₁, hb₂, hb₃ ⟩ := this;
+        have h_card : Set.ncard b = 3 := by
+          have h_card : Module.finrank ℝ (Submodule.span ℝ b) = 3 := by
+            rw [ hb₂, h_col_space ];
+          have h_card : Module.finrank ℝ (Submodule.span ℝ b) = Set.ncard b := by
+            have h_finite : Set.Finite b := by
+              exact Set.Finite.subset ( Set.toFinite ( Set.range M.col ) ) hb₁
+            convert ( finrank_span_eq_card <| hb₃ );
+            all_goals norm_num [ Set.ncard_eq_toFinset_card' ];
+            convert Set.ncard_coe_finset ( h_finite.toFinset );
+            all_goals try { exact h_finite.fintype };
+            · aesop;
+            · rw [ Fintype.card_of_subtype ] ; aesop;
+          linarith;
+        have h_card : ∃ cols : Fin 3 → Fin 4, b = Set.range (fun i => M.col (cols i)) := by
+          have h_card : ∃ cols : Fin 3 → (Fin 3 → ℝ), b = Set.range cols := by
+            have h_card : ∃ cols : Finset (Fin 3 → ℝ), cols.card = 3 ∧ b = cols := by
+              have h_card : ∃ cols : Finset (Fin 3 → ℝ), b = cols := by
+                exact ⟨ Set.Finite.toFinset ( Set.finite_of_ncard_pos ( by linarith ) ), by simpa ⟩;
+              aesop;
+            obtain ⟨ cols, hcols₁, hcols₂ ⟩ := h_card;
+            have h_card : Nonempty (Fin 3 ≃ cols) := by
+              exact ⟨ Fintype.equivOfCardEq <| by simp +decide [ hcols₁ ] ⟩;
+            obtain ⟨ e ⟩ := h_card;
+            use fun i => e i |>.1;
+            ext x; simp [hcols₂];
+            exact ⟨ fun hx => ⟨ e.symm ⟨ x, hx ⟩, by simp +decide ⟩, by rintro ⟨ y, rfl ⟩ ; exact e y |>.2 ⟩;
+          obtain ⟨ cols, rfl ⟩ := h_card;
+          choose f hf using fun i => hb₁ ( Set.mem_range_self i );
+          exact ⟨ f, by ext; aesop ⟩;
+        obtain ⟨ cols, rfl ⟩ := h_card;
+        use cols;
+        convert hb₃.comp _ _;
+        rotate_left;
+        use fun i => ⟨ M.col ( cols i ), Set.mem_range_self i ⟩;
+        · intro i j hij; have := Finset.card_image_iff.mp ( show Finset.card ( Finset.image ( fun i => M.col ( cols i ) ) Finset.univ ) = Finset.card ( Finset.univ : Finset ( Fin 3 ) ) from ?_ ) ; aesop;
+          rw [ ← Set.ncard_coe_finset ] ; aesop;
+        · rfl;
+      -- Since the columns of `M` are linearly independent, the determinant of the submatrix formed by these columns is nonzero.
+      have h_det_nonzero : Matrix.det (Matrix.of (fun i j => M i (cols j))) ≠ 0 := by
+        rw [ Fintype.linearIndependent_iff ] at hcols;
+        intro h_det_zerocols;
+        obtain ⟨ v, hv ⟩ := Matrix.exists_mulVec_eq_zero_iff.mpr h_det_zerocols;
+        exact hv.1 ( funext fun i => hcols v ( by ext j; simpa [ Matrix.mulVec, dotProduct, mul_comm ] using congr_fun hv.2 j ) i );
+      exact h_det_nonzero (h cols)
+
+open Arxiv.«2602.05192»
+open Classical Matrix BigOperators
+
+lemma rank_eq_three_imp_eval_cam_ne_zero {n : ℕ} (A : Fin n → Matrix3x4) (α : Fin n) :
+    (A α).rank = 3 → evalCameraPolynomial (poly_sum_sq_cam n α) A ≠ 0 := by
+      intro h_rank h_zero_sum;
+      -- By definition of `poly_sum_sq_cam`, we know that `evalCameraPolynomial (poly_sum_sq_cam n α) A` is the sum of squares of determinants of 3x3 submatrices of `A α`.
+      have h_sum_sq : ∑ cols : Fin 3 → Fin 4, (Matrix.det ((A α).submatrix id cols))^2 = 0 := by
+        unfold Arxiv.«2602.05192».evalCameraPolynomial at h_zero_sum;
+        unfold Arxiv.«2602.05192».poly_sum_sq_cam at h_zero_sum;
+        convert h_zero_sum using 1;
+        unfold Arxiv.«2602.05192».poly_minor_cam; simp +decide [ Matrix.det_apply' ] ;
+        unfold Arxiv.«2602.05192».mat_poly_cam; simp +decide [ Matrix.det_apply' ] ;
+      -- Since the sum of squares of determinants is zero, each determinant must be zero.
+      have h_det_zero : ∀ cols : Fin 3 → Fin 4, (Matrix.det ((A α).submatrix id cols)) = 0 := by
+        rw [ Finset.sum_eq_zero_iff_of_nonneg fun _ _ => sq_nonneg _ ] at h_sum_sq ; aesop;
+      exact absurd ( rank_lt_three_of_all_3x3_minors_zero ( A α ) h_det_zero ) ( by linarith )
+
+open Arxiv.«2602.05192»
+open Classical Matrix BigOperators
+
+lemma total_genericity_poly_ne_zero {n : ℕ} (hn : 5 ≤ n) :
+    total_genericity_poly n ≠ 0 := by
+      -- Let's choose any witness A for n ≥ 5.
+      set A : Fin n → Matrix3x4 := witnessA n;
+      -- By definition of $A$, we know that its evaluation at the witness cameras is non-zero.
+      have h_eval_nonzero : (evalCameraPolynomial (poly_sum_sq_stacked n) A) * (∏ α : Fin n, evalCameraPolynomial (poly_sum_sq_cam n α) A) ≠ 0 := by
+        have h_eval_nonzero : (evalCameraPolynomial (poly_sum_sq_stacked n) A) ≠ 0 ∧ ∀ α : Fin n, (evalCameraPolynomial (poly_sum_sq_cam n α) A) ≠ 0 := by
+          have h_eval_nonzero : (StackedMat A).rank = 4 ∧ (∀ α : Fin n, (A α).rank = 3) := by
+            simpa [Arxiv.«2602.05192».RankGenericCameras] using (Arxiv.«2602.05192».witnessA_properties hn)
+          exact ⟨ by simpa using rank_eq_four_imp_eval_stacked_ne_zero A h_eval_nonzero.1, fun α => by simpa using rank_eq_three_imp_eval_cam_ne_zero A α ( h_eval_nonzero.2 α ) ⟩;
+        exact mul_ne_zero h_eval_nonzero.1 <| Finset.prod_ne_zero_iff.mpr fun α _ => h_eval_nonzero.2 α;
+      contrapose! h_eval_nonzero;
+      convert congr_arg ( fun p => p.eval ( fun v => A v.1 v.2.1 v.2.2 ) ) h_eval_nonzero using 1;
+      unfold Arxiv.«2602.05192».total_genericity_poly; simp +decide [ Arxiv.«2602.05192».evalCameraPolynomial ] ;
+
+open Arxiv.«2602.05192»
+open Classical Matrix BigOperators
+
+lemma eval_total_genericity_poly_witness_ne_zero {n : ℕ} (hn : 5 ≤ n) :
+    evalCameraPolynomial (total_genericity_poly n) (witnessA n) ≠ 0 := by
+      -- Apply the definition of `total_genericity_poly`.
+      simp [Arxiv.«2602.05192».total_genericity_poly];
+      unfold Arxiv.«2602.05192».evalCameraPolynomial;
+      simp +zetaDelta at *;
+      constructor;
+      · convert rank_eq_four_imp_eval_stacked_ne_zero _ _;
+        convert ( witnessA_properties hn ).1;
+      · apply Finset.prod_ne_zero_iff.mpr;
+        intro a ha;
+        convert rank_eq_three_imp_eval_cam_ne_zero _ _ _;
+        convert Arxiv.«2602.05192».witnessA_properties hn |>.2 a
+
+end AristotleLemmas
+
 theorem genericity_polynomial_exists (n : ℕ) (hn : 5 ≤ n) :
     ∃ (G : MvPolynomial (AIndex n) ℝ), G ≠ 0 ∧
       ∀ A : Fin n → Matrix3x4,
-        evalCameraPolynomial G A ≠ 0 → GenericCameras A
+        evalCameraPolynomial G A ≠ 0 → RankGenericCameras A
     := by
   classical
-  sorry
+  refine' ⟨ _, _, _ ⟩;
+  -- Define the polynomial G as the product of the sum of squares of the minors of the stacked matrix and the sum of squares of the minors of each camera matrix.
+  set G : MvPolynomial (Arxiv.«2602.05192».AIndex n) ℝ := (poly_sum_sq_stacked n) * (∏ α : Fin n, poly_sum_sq_cam n α);
+  exact G;
+  · convert total_genericity_poly_ne_zero hn using 1;
+  · intro A hA;
+    refine' ⟨ _, _ ⟩;
+    · apply Arxiv.«2602.05192».eval_poly_sum_sq_stacked_ne_zero;
+      exact fun h => hA <| by rw [ Arxiv.«2602.05192».evalCameraPolynomial ] at *; simp_all +decide [ Finset.prod_eq_zero_iff, sub_eq_iff_eq_add ] ;
+    · intro α;
+      apply eval_poly_sum_sq_cam_ne_zero A α;
+      simp_all +decide [ Finset.prod_eq_prod_diff_singleton_mul ( Finset.mem_univ α ) ];
+      unfold Arxiv.«2602.05192».evalCameraPolynomial at *; aesop;
 
 -- ═══════════════════════════════════════════════════════════════
 -- Main theorem
@@ -1601,25 +2090,20 @@ theorem nine :
       ∀ n : ℕ, 5 ≤ n →
         ∃ (N : ℕ) (F : PolyMap n N),
           PolyMap.UniformDegreeBound d F ∧
-          ∃ (G : MvPolynomial (AIndex n) ℝ), G ≠ 0 ∧
-            ∀ (A : Fin n → Matrix3x4),
-              evalCameraPolynomial G A ≠ 0 →
-              ∀ (lam : Lambda n),
-                (∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ) →
-                  (IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
-                    (∃ (u v w x : Fin n → ℝˣ),
-                      ∀ α β γ δ, NotIdentical α β γ δ →
-                        lam α β γ δ =
-                          (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
+          ∀ (A : Fin n → Matrix3x4), GenericCameras A →
+            ∀ (lam : Lambda n),
+              (∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ) →
+                (IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
+                  (∃ (u v w x : Fin n → ℝˣ),
+                    ∀ α β γ δ, NotIdentical α β γ δ →
+                      lam α β γ δ =
+                        (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
   refine ⟨5, ?_⟩
   intro n hn
   refine ⟨numMinors n, polyMapF n, polyMapF_degree_bound n, ?_⟩
-  obtain ⟨G, hGne, hGgen⟩ := genericity_polynomial_exists n hn
-  refine ⟨G, hGne, ?_⟩
-  intro A hGA lam hsupp
+  intro A hgen lam hsupp
   constructor
   · intro hvanish
-    have hgen : GenericCameras A := hGgen A hGA
     exact reverse_direction hn A hgen lam hsupp hvanish
   · rintro ⟨u, v, w, x, hfact⟩
     exact forward_direction A lam hsupp u v w x hfact
