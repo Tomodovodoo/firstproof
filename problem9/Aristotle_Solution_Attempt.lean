@@ -1,29 +1,4 @@
 /-
-This file was edited by Aristotle (https://aristotle.harmonic.fun).
-
-Lean version: leanprover/lean4:v4.24.0
-Mathlib version: f897ebcf72cd16f89ab4577d0c826cd14afaafc7
-This project request had uuid: 12327c74-2425-4add-a7ee-593e099b399b
-
-To cite Aristotle, tag @Aristotle-Harmonic on GitHub PRs/issues, and add as co-author to commits:
-Co-authored-by: Aristotle (Harmonic) <aristotle-harmonic@harmonic.fun>
-
-The following was proved by Aristotle:
-
-- theorem minors5x5_zero_imp_rank_le_four {α β : Type*} [Fintype α] [Fintype β]
-    [DecidableEq α] [DecidableEq β]
-    (M : Matrix α β ℝ)
-    (hminors : ∀ (rows : Fin 5 → α) (cols : Fin 5 → β),
-      (M.submatrix rows cols).det = 0) :
-    M.rank ≤ 4
-
-- theorem genericity_polynomial_exists (n : ℕ) (hn : 5 ≤ n) :
-    ∃ (G : MvPolynomial (AIndex n) ℝ), G ≠ 0 ∧
-      ∀ A : Fin n → Matrix3x4,
-        evalCameraPolynomial G A ≠ 0 → GenericCameras A
--/
-
-/-
 Solution to Problem 9 (arXiv:2602.05192).
 
 Proves `theorem nine`: existence of a polynomial map F (all 5×5 minors of
