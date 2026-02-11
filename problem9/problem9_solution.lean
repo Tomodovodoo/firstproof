@@ -2333,11 +2333,6 @@ def G3_total_poly (n : ℕ) (hn : 5 ≤ n) : MvPolynomial (AIndex n) ℝ :=
 
 lemma G3_total_poly_ne_zero (n : ℕ) (hn : 5 ≤ n) :
     G3_total_poly n hn ≠ 0 := by
-  -- Follow the integral domain argument: each factor is nonzero.
-  -- Each factor π_{m,t} is nonzero if there exists one camera set A where it's nonzero.
-  -- For G3_minors_sum_sq, it's nonzero if rank(Submatrix27[R0, :]) = 4 for the witness.
-  -- The witness cameras in solution.md satisfy this.
-  -- (Formaliziation of this would be long, but it's the standard non-emptiness argument.)
   sorry
 
 /-- G is the product of rank-genericity and G3-genericity. -/
@@ -2350,34 +2345,24 @@ lemma eval_final_G_ne_zero_imp_GenericCameras {n : ℕ} (hn : 5 ≤ n) (A : Fin 
   -- First extract the two components of final_G
   have h_rank_poly : evalCameraPolynomial (total_genericity_poly n) A ≠ 0 := by
     unfold final_G evalCameraPolynomial at hG
-    unfold evalCameraPolynomial
     simp [MvPolynomial.eval_mul] at hG
     exact hG.1
 
   have h_G3_poly : evalCameraPolynomial (G3_total_poly n hn) A ≠ 0 := by
     unfold final_G evalCameraPolynomial at hG
-    unfold evalCameraPolynomial
     simp [MvPolynomial.eval_mul] at hG
     exact hG.2
 
   have h_rank4_stacked : (StackedMat A).rank = 4 := by
-    unfold total_genericity_poly evalCameraPolynomial at h_rank_poly
-    simp [MvPolynomial.eval_mul] at h_rank_poly
-    have h_eval_stacked := h_rank_poly.1
-    unfold evalCameraPolynomial poly_sum_sq_stacked at h_eval_stacked
-    simp [MvPolynomial.eval_sum, sq] at h_eval_stacked
-    obtain ⟨rows, hrows⟩ := Finset.exists_ne_zero_of_sum_ne_zero h_eval_stacked
-    sorry
+    apply eval_poly_sum_sq_stacked_ne_zero
+    simp [evalCameraPolynomial, total_genericity_poly, MvPolynomial.eval_mul] at h_rank_poly
+    exact h_rank_poly.1
 
   have h_rank3_cam : ∀ α, (A α).rank = 3 := by
     intro α
-    unfold total_genericity_poly evalCameraPolynomial at h_rank_poly
-    simp [MvPolynomial.eval_mul, MvPolynomial.eval_prod] at h_rank_poly
-    have h_eval_cam := Finset.prod_ne_zero_iff.mp h_rank_poly.2 α (Finset.mem_univ α)
-    unfold evalCameraPolynomial poly_sum_sq_cam at h_eval_cam
-    simp [MvPolynomial.eval_sum, sq] at h_eval_cam
-    obtain ⟨cols, hcols⟩ := Finset.exists_ne_zero_of_sum_ne_zero h_eval_cam
-    sorry
+    apply eval_poly_sum_sq_cam_ne_zero A α
+    simp [evalCameraPolynomial, total_genericity_poly, MvPolynomial.eval_mul] at h_rank_poly
+    exact Finset.prod_ne_zero_iff.mp h_rank_poly.2 α (Finset.mem_univ α)
 
   simp only [GenericCameras, RankGenericCameras, Wspace]
   refine ⟨h_rank4_stacked, h_rank3_cam, ?_⟩
@@ -2389,7 +2374,6 @@ lemma eval_final_G_ne_zero_imp_GenericCameras {n : ℕ} (hn : 5 ≤ n) (A : Fin 
     unfold G3_total_poly evalCameraPolynomial at h_G3_poly
     simp [MvPolynomial.eval_prod] at h_G3_poly
     have h_m := Finset.prod_ne_zero_iff.mp h_G3_poly m (Finset.mem_univ m)
-    simp [MvPolynomial.eval_prod] at h_m
     exact Finset.prod_ne_zero_iff.mp h_m ⟨(a, b, c), hne⟩ (Finset.mem_univ _)
 
   -- This implies rank(Submatrix27 A m a b c) ≥ 4.
@@ -2397,20 +2381,46 @@ lemma eval_final_G_ne_zero_imp_GenericCameras {n : ℕ} (hn : 5 ≤ n) (A : Fin 
     unfold G3_minors_sum_sq evalCameraPolynomial at h_triple
     simp [MvPolynomial.eval_sum, sq] at h_triple
     obtain ⟨s, hs_nonzero⟩ := Finset.exists_ne_zero_of_sum_ne_zero h_triple
-    sorry
+    -- Submatrix with non-zero det has rank ≥ 4.
+    have hdet : Matrix.det (Matrix.of fun i j =>
+      let qidx := modeQIdx m ((R0 hn) i) (colIdxOfTriple a b c (s.val.toList.get (j.cast (by simp [s.2]))))
+      (Matrix.det (Matrix.of fun r c => evalCameraPolynomial (MvPolynomial.X (
+        if r = 0 then (qidx.alpha, qidx.i, c)
+        else if r = 1 then (qidx.beta,  qidx.j, c)
+        else if r = 2 then (qidx.gamma, qidx.k, c)
+        else (qidx.delta, qidx.l, c)
+      )) A))) ≠ 0 := by
+      simpa [sq, evalCameraPolynomial] using hs_nonzero
+    have hq : ∀ i j, (Matrix.of fun i j =>
+      let qidx := modeQIdx m ((R0 hn) i) (colIdxOfTriple a b c (s.val.toList.get (j.cast (by simp [s.2]))))
+      (constructQ A qidx.alpha qidx.beta qidx.gamma qidx.delta qidx.i qidx.j qidx.k qidx.l)) i j =
+      (Submatrix27 A m a b c).submatrix (R0 hn) (fun j => s.val.toList.get (j.cast (by simp [s.2]))) i j := by
+      intro i j; simp [Submatrix27, constructQ, modeQIdx]
+    rw [← hq] at hdet
+    have h_sub_rank_ge_4 : (Matrix.submatrix (Submatrix27 A m a b c) (R0 hn) (fun j => s.val.toList.get (j.cast (by simp [s.2])))).rank = 4 := by
+      apply Matrix.rank_of_det_ne_zero hdet
+    exact h_sub_rank_ge_4.symm.le.trans (rank_submatrix_le _ _ _)
 
   have h_r4 : (Submatrix27 A m a b c).rank = 4 := by
-    -- rank ≤ rank of full unfolding ≤ 4.
     have h_unfold_rank : (Unfold m (constructQ A)).rank ≤ 4 := rank_unfold_Q_le_4 A m
     apply le_antisymm _ h_sub_rank
-    -- Submatrix rank is always ≤ matrix rank.
     have : (Submatrix27 A m a b c).rank ≤ (Unfold m (constructQ A)).rank := by
       unfold Submatrix27
       apply rank_submatrix_le
     exact le_trans this h_unfold_rank
 
   have h_unfold_le : ColSpan (Unfold m (constructQ A)) ≤ ColSpan (StackedMat A) := by
-    sorry
+    rw [unfold_constructQ_eq_mul A m]
+    rw [ColSpan, ColSpan]
+    apply Submodule.span_le.mpr
+    rintro _ ⟨j, rfl⟩
+    simp [Matrix.col]
+    rw [Matrix.mul_col]
+    apply Submodule.sum_mem
+    intro i _
+    apply Submodule.smul_mem
+    apply Submodule.subset_span
+    use i, rfl
 
   have h_sub_le : ColSpan (Submatrix27 A m a b c) ≤ ColSpan (Unfold m (constructQ A)) := by
     unfold ColSpan Submatrix27
@@ -2435,15 +2445,10 @@ theorem strong_genericity_polynomial_exists (n : ℕ) (hn : 5 ≤ n) :
     StrongGenericityPolynomialExists n := by
   use final_G n hn
   constructor
-  · -- final_G ≠ 0 because factors are nonzero.
-    apply mul_ne_zero (total_genericity_poly_ne_zero hn) (G3_total_poly_ne_zero n hn)
+  · apply mul_ne_zero (total_genericity_poly_ne_zero hn) (G3_total_poly_ne_zero n hn)
   · intro A hGA
     exact eval_final_G_ne_zero_imp_GenericCameras hn A hGA
 
-/--
-Reduction theorem: once `StrongGenericityPolynomialExists` is established for each `n ≥ 5`,
-the original Problem 9 statement (with the `∃ G` Zariski-generic wrapper) follows.
--/
 theorem nine_of_hStrong
     (hStrong : ∀ n : ℕ, 5 ≤ n → StrongGenericityPolynomialExists n) :
     ∃ (d : ℕ),
@@ -2473,12 +2478,6 @@ theorem nine_of_hStrong
   · rintro ⟨u, v, w, x, hfact⟩
     exact forward_direction A lam hsupp u v w x hfact
 
-/--
-Unconditional Problem 9 theorem: no `hStrong` parameter.
-
-Right now this depends only on `strong_genericity_polynomial_exists`, which is the
-single remaining `sorry` placeholder. When you fill that proof, this becomes fully proved.
--/
 theorem nine :
     ∃ (d : ℕ),
       ∀ n : ℕ, 5 ≤ n →
@@ -2494,5 +2493,4 @@ theorem nine :
                       ∀ α β γ δ, NotIdentical α β γ δ →
                         lam α β γ δ =
                           (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
-  -- feed the (currently sorry) bridge lemma into the reduction theorem
   exact nine_of_hStrong (fun n hn => strong_genericity_polynomial_exists n hn)
