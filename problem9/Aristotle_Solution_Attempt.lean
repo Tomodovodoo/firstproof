@@ -549,45 +549,7 @@ lemma forward_direction {n : ℕ} (A : Fin n → Matrix3x4) (lam : Lambda n)
 -- ═══════════════════════════════════════════════════════════════
 
 
--- TODO: converse to `rank_le_four_imp_5x5_det_zero`.
--- If all 5×5 minors vanish, then the matrix rank is ≤ 4.
-/- PROVIDED SOLUTION:
 
-Goal:
-  If every `5×5` minor of a real matrix `M : Matrix α β ℝ` is zero, then `rank M ≤ 4`.
-
-Standard linear algebra fact (over a field):
-  `rank M` is the largest integer `k` such that some `k×k` minor of `M` is nonzero.
-In particular:
-  `rank M ≥ 5`  ⇔  ∃ rows cols, det (M.submatrix rows cols) ≠ 0 for some `rows : Fin 5 → α`,
-                    `cols : Fin 5 → β`.
-So the contrapositive of the theorem is:
-  if `rank M ≥ 5` then some `5×5` minor is nonzero.
-
-Proof idea for the contrapositive:
-1) View `M` as a linear map `ℝ^β → ℝ^α` via `mulVecLin`.
-   Then `rank M = dim(im(M)) = dim(span(columns of M))`.
-2) If `rank M ≥ 5`, then the column span contains 5 linearly independent vectors.
-   Concretely, one can pick 5 columns of `M` that are linearly independent; equivalently,
-   there exists a submatrix `S` consisting of 5 columns of `M` with `rank S = 5`.
-3) A matrix with 5 columns has rank 5 iff its columns are linearly independent, i.e. the linear map
-   `ℝ^5 → ℝ^α` defined by `S` is injective.
-4) Injectivity forces the existence of 5 coordinate functionals (i.e. a choice of 5 rows) such that
-   the composite `ℝ^5 → ℝ^α → ℝ^5` is an isomorphism. In matrix terms, selecting those 5 rows gives
-   a square `5×5` submatrix `S'` with `det S' ≠ 0`.
-   (Geometrically: if the image is 5D, some 5 coordinates restrict to a basis.)
-5) Since `S` is a column-submatrix of `M`, any `5×5` minor of `S` is also a `5×5` minor of `M`
-   (for the same row selection and the chosen 5 columns).
-   Hence `M` has a `5×5` minor with nonzero determinant.
-
-Therefore, if *all* `5×5` minors of `M` vanish, `rank M` cannot be ≥ 5, so `rank M ≤ 4`.
-
-Remarks on formalization strategy (Lean/mathlib):
-  One can implement step (4) by working with `im(M)` as a finite-dimensional subspace of `(α → ℝ)`,
-  choosing a basis of `im(M)` and then using the existence of a set of 5 coordinates on `(α → ℝ)`
-  that makes the coordinate map injective on that 5D subspace, yielding an invertible `5×5` matrix.
-  This is the only genuinely nontrivial linear-algebra bridge needed here.
--/
 noncomputable section AristotleLemmas
 
 /-
@@ -1110,6 +1072,308 @@ lemma lam_ne_zero_of_notAllEqual3 {n : ℕ} (lam : Lambda n)
   intro α
   exact (hsupp α β γ δ).2 (notIdentical_of_notAllEqual3 (α := α) h)
 
+lemma rank_rowScaled_eq {α β : Type*} [Fintype α] [Fintype β]
+    [DecidableEq α] [DecidableEq β]
+    (M : Matrix α β ℝ) (r : α → ℝ) (hr : ∀ i, r i ≠ 0) :
+    (Matrix.of fun i j => r i * M i j).rank = M.rank := by
+  classical
+  let Ms : Matrix α β ℝ := Matrix.of fun i j => r i * M i j
+  have hle1 : Ms.rank ≤ M.rank := by
+    simpa [Ms, one_mul] using (rank_scaled_le (M := M) (r := r) (c := fun _ => (1 : ℝ)))
+  have hM : M = Matrix.of (fun i j => (r i)⁻¹ * Ms i j) := by
+    ext i j
+    have hri : (r i)⁻¹ * (r i * M i j) = M i j := by
+      field_simp [hr i]
+    simpa [Ms, mul_assoc] using hri.symm
+  have hle2 : M.rank ≤ Ms.rank := by
+    have hscaled : (Matrix.of fun i j => (r i)⁻¹ * Ms i j).rank ≤ Ms.rank := by
+      simpa [one_mul] using
+        (rank_scaled_le (M := Ms) (r := fun i => (r i)⁻¹) (c := fun _ => (1 : ℝ)))
+    simpa [hM] using hscaled
+  exact le_antisymm hle1 hle2
+
+lemma exists_fin_ne_of_five {n : ℕ} (hn : 5 ≤ n) (a : Fin n) : ∃ b : Fin n, b ≠ a := by
+  have h0 : (0 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 0 < 5) hn
+  have h1 : (1 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 1 < 5) hn
+  by_cases ha : a.1 = 0
+  · refine ⟨⟨1, h1⟩, ?_⟩
+    intro h
+    have : (a : ℕ) = 1 := by simpa using congrArg Fin.val h.symm
+    have : (1 : ℕ) = 0 := by simpa [ha] using this
+    exact Nat.one_ne_zero this
+  · refine ⟨⟨0, h0⟩, ?_⟩
+    intro h
+    apply ha
+    simpa using congrArg Fin.val h.symm
+
+def modeCoeff {n : ℕ} (m : Fin 4) (lam : Lambda n)
+    (row a b c : Fin n) : ℝ :=
+  match m with
+  | ⟨0, _⟩ => lam row a b c
+  | ⟨1, _⟩ => lam a row b c
+  | ⟨2, _⟩ => lam a b row c
+  | ⟨3, _⟩ => lam a b c row
+
+lemma notIdentical_mode1_of_notAllEqual3 {n : ℕ} {row a b c : Fin n}
+    (h : NotAllEqual3 a b c) : NotIdentical a row b c := by
+  intro hall
+  exact h ⟨hall.1.trans hall.2.1, hall.2.2⟩
+
+lemma notIdentical_mode2_of_notAllEqual3 {n : ℕ} {row a b c : Fin n}
+    (h : NotAllEqual3 a b c) : NotIdentical a b row c := by
+  intro hall
+  exact h ⟨hall.1, hall.2.1.trans hall.2.2⟩
+
+lemma notIdentical_mode3_of_notAllEqual3 {n : ℕ} {row a b c : Fin n}
+    (h : NotAllEqual3 a b c) : NotIdentical a b c row := by
+  intro hall
+  exact h ⟨hall.1, hall.2.1⟩
+
+lemma modeCoeff_ne_zero_of_notAllEqual3 {n : ℕ} (m : Fin 4) (lam : Lambda n)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    {a b c : Fin n} (h : NotAllEqual3 a b c) :
+    ∀ row : Fin n, modeCoeff m lam row a b c ≠ 0 := by
+  intro row
+  fin_cases m
+  · simpa [modeCoeff] using (lam_ne_zero_of_notAllEqual3 (lam := lam) hsupp (β := a) (γ := b)
+      (δ := c) h row)
+  · simpa [modeCoeff] using (hsupp a row b c).2 (notIdentical_mode1_of_notAllEqual3 (row := row)
+      (a := a) (b := b) (c := c) h)
+  · simpa [modeCoeff] using (hsupp a b row c).2 (notIdentical_mode2_of_notAllEqual3 (row := row)
+      (a := a) (b := b) (c := c) h)
+  · simpa [modeCoeff] using (hsupp a b c row).2 (notIdentical_mode3_of_notAllEqual3 (row := row)
+      (a := a) (b := b) (c := c) h)
+
+lemma submatrix27_scaled_eq_rowScale {n : ℕ} (m : Fin 4) (A : Fin n → Matrix3x4)
+    (lam : Lambda n) (a b c : Fin n) :
+    ((Unfold m (scaleQ lam (constructQ A))).submatrix id (colIdxOfTriple a b c))
+      = Matrix.of (fun p t => modeCoeff m lam p.1 a b c * (Submatrix27 A m a b c) p t) := by
+  ext p t
+  fin_cases m <;>
+    simp [Submatrix27, colIdxOfTriple, modeCoeff, Unfold, scaleQ]
+
+lemma colSpan_rowBlockScale {n : ℕ} {k : Type*} [Fintype k] [DecidableEq k]
+    (M : Matrix (RowIdx n) k ℝ) (s : Fin n → ℝ) :
+    ColSpan (Matrix.of (fun p j => s p.1 * M p j))
+      = (ColSpan M).map (blockScalarLM s) := by
+  apply le_antisymm
+  · refine Submodule.span_le.2 ?_
+    rintro _ ⟨j, rfl⟩
+    refine (Submodule.mem_map).2 ?_
+    refine ⟨M.col j, ?_, ?_⟩
+    · exact Submodule.subset_span ⟨j, rfl⟩
+    · ext p
+      simp [blockScalarLM, Matrix.col, Matrix.of_apply]
+  · refine (Submodule.map_le_iff_le_comap).2 ?_
+    refine Submodule.span_le.2 ?_
+    rintro _ ⟨j, rfl⟩
+    have hcol :
+        blockScalarLM s (M.col j) = (Matrix.of (fun p j => s p.1 * M p j)).col j := by
+      ext p
+      simp [blockScalarLM, Matrix.col, Matrix.of_apply]
+    simpa [hcol] using
+      (Submodule.subset_span
+        (s := Set.range (Matrix.col (Matrix.of (fun p j => s p.1 * M p j))))
+        ⟨j, rfl⟩)
+
+theorem separate_mode_of_generic {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4) (lam : Lambda n)
+    (hgen : GenericCameras A) (m : Fin 4)
+    (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
+    (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
+    ∃ (u : Fin n → ℝˣ) (μ : Fin n → Fin n → Fin n → ℝˣ),
+      ∀ row a b c, NotAllEqual3 a b c →
+        modeCoeff m lam row a b c = (u row : ℝ) * (μ a b c : ℝ) := by
+  classical
+  rcases hgen with ⟨hstack, hcam, hG3⟩
+  have _ : ∀ α : Fin n, (A α).rank = 3 := hcam
+  have hGm : G3 A m := hG3 m
+
+  have hrankW :
+      (StackedMat A).rank = Module.finrank ℝ (Wspace A) := by
+    simpa [Wspace, ColSpan] using
+      (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := StackedMat A))
+  have hfinW : Module.finrank ℝ (Wspace A) = 4 := by
+    simpa [hrankW] using hstack
+
+  have h0 : (0 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 0 < 5) hn
+  have h1 : (1 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 1 < 5) hn
+  have h2 : (2 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 2 < 5) hn
+  let i0 : Fin n := ⟨0, h0⟩
+  let i1 : Fin n := ⟨1, h1⟩
+  let i2 : Fin n := ⟨2, h2⟩
+  have h01 : i0 ≠ i1 := by
+    intro h
+    have : (0 : ℕ) = 1 := by simpa [i0, i1] using congrArg Fin.val h
+    exact Nat.zero_ne_one this
+  have hNotAll012 : NotAllEqual3 i0 i1 i2 := by
+    intro h
+    exact h01 h.1
+
+  have hcol_of :
+      ∀ a b c : Fin n, NotAllEqual3 a b c →
+        ColSpan (Unfold m (scaleQ lam (constructQ A))) =
+          (Wspace A).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) := by
+    intro a b c hneq
+    let M : Matrix (RowIdx n) (ColIdx n) ℝ := Unfold m (scaleQ lam (constructQ A))
+    let S : Matrix (RowIdx n) Triple3 ℝ := Submatrix27 A m a b c
+    let Ss : Matrix (RowIdx n) Triple3 ℝ := M.submatrix id (colIdxOfTriple a b c)
+    have hSs_def : Ss = Matrix.of (fun p t => modeCoeff m lam p.1 a b c * S p t) := by
+      simpa [Ss, M, S] using
+        (submatrix27_scaled_eq_rowScale (m := m) (A := A) (lam := lam) (a := a) (b := b) (c := c))
+    have hcolS : ColSpan S = Wspace A := by
+      simpa [S] using hGm a b c hneq
+    have hfinS : Module.finrank ℝ (ColSpan S) = 4 := by
+      rw [hcolS]
+      exact hfinW
+    have hSrank' : S.rank = Module.finrank ℝ (ColSpan S) := by
+      simpa [ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := S))
+    have hSrank : S.rank = 4 := by
+      simpa [hSrank'] using hfinS
+    have hs_nonzero : ∀ p : RowIdx n, modeCoeff m lam p.1 a b c ≠ 0 := by
+      intro p
+      exact modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp (a := a) (b := b)
+        (c := c) hneq p.1
+    have hSs_rank : Ss.rank = 4 := by
+      calc
+        Ss.rank = (Matrix.of (fun p t => modeCoeff m lam p.1 a b c * S p t)).rank := by
+          simpa [hSs_def]
+        _ = S.rank := by
+          simpa using
+            (rank_rowScaled_eq (M := S) (r := fun p : RowIdx n => modeCoeff m lam p.1 a b c)
+              (hr := hs_nonzero))
+        _ = 4 := hSrank
+    have hcols : ∀ j : Triple3, ∃ i : ColIdx n, Ss.col j = M.col i := by
+      intro j
+      refine ⟨colIdxOfTriple a b c j, ?_⟩
+      ext p
+      simp [Ss, M]
+    have hcolEq : ColSpan Ss = ColSpan M :=
+      colSpan_eq_of_cols_subtype_and_rank (M := M) (S := Ss) hcols (hrank m) hSs_rank
+    have hscaled :
+        ColSpan Ss =
+          (ColSpan S).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) := by
+      calc
+        ColSpan Ss = ColSpan (Matrix.of (fun p t => modeCoeff m lam p.1 a b c * S p t)) := by
+          simpa [hSs_def]
+        _ = (ColSpan S).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) :=
+          colSpan_rowBlockScale (M := S) (s := fun α => modeCoeff m lam α a b c)
+    calc
+      ColSpan (Unfold m (scaleQ lam (constructQ A))) = ColSpan M := by rfl
+      _ = ColSpan Ss := hcolEq.symm
+      _ = (ColSpan S).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) := hscaled
+      _ = (Wspace A).map (blockScalarLM (fun α => modeCoeff m lam α a b c)) := by
+        simpa [hcolS]
+
+  let u : Fin n → ℝˣ := fun row =>
+    Units.mk0 (modeCoeff m lam row i0 i1 i2 / modeCoeff m lam i0 i0 i1 i2) (by
+      have hnum := modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+        (a := i0) (b := i1) (c := i2) hNotAll012 row
+      have hden := modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+        (a := i0) (b := i1) (c := i2) hNotAll012 i0
+      exact div_ne_zero hnum hden)
+  let μ : Fin n → Fin n → Fin n → ℝˣ := fun a b c =>
+    if hneq : NotAllEqual3 a b c then
+      Units.mk0 (modeCoeff m lam i0 a b c)
+        (modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+          (a := a) (b := b) (c := c) hneq i0)
+    else 1
+
+  refine ⟨u, μ, ?_⟩
+  intro row a b c hneq
+  let us : Fin n → ℝˣ := fun α =>
+    Units.mk0 (modeCoeff m lam α a b c)
+      (modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+        (a := a) (b := b) (c := c) hneq α)
+  let usRef : Fin n → ℝˣ := fun α =>
+    Units.mk0 (modeCoeff m lam α i0 i1 i2)
+      (modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+        (a := i0) (b := i1) (c := i2) hNotAll012 α)
+  let sRatio : Fin n → ℝˣ := fun α => (us α)⁻¹ * usRef α
+  let Ls := blockScalarLM (fun α => (us α : ℝ))
+  let Lref := blockScalarLM (fun α => (usRef α : ℝ))
+  let Linv := blockScalarLM (fun α => (((us α)⁻¹ : ℝˣ) : ℝ))
+  let Lratio := blockScalarLM (fun α => (sRatio α : ℝ))
+
+  have hmapEq :
+      (Wspace A).map Ls = (Wspace A).map Lref := by
+    have hcur := hcol_of a b c hneq
+    have href := hcol_of i0 i1 i2 hNotAll012
+    exact by
+      simpa [Ls, Lref, us, usRef] using (hcur.symm.trans href)
+
+  have hcomp_inv_s : Linv.comp Ls = LinearMap.id := by
+    apply LinearMap.ext
+    intro x
+    ext p
+    have hmul : (((us p.1)⁻¹ : ℝˣ) : ℝ) * ((us p.1 : ℝ) * x p) = x p := by
+      calc
+        (((us p.1)⁻¹ : ℝˣ) : ℝ) * ((us p.1 : ℝ) * x p)
+            = ((((us p.1)⁻¹ : ℝˣ) : ℝ) * (us p.1 : ℝ)) * x p := by ring
+        _ = x p := by simp
+    simpa [Linv, Ls, blockScalarLM, mul_assoc] using hmul
+  have hcomp_inv_ref : Linv.comp Lref = Lratio := by
+    ext v p
+    simp [Linv, Lref, Lratio, sRatio, blockScalarLM, mul_assoc, mul_left_comm, mul_comm]
+
+  have hstable : (Wspace A).map Lratio = Wspace A := by
+    calc
+      (Wspace A).map Lratio = (Wspace A).map (Linv.comp Lref) := by simpa [hcomp_inv_ref]
+      _ = ((Wspace A).map Lref).map Linv := by
+            simpa using (Submodule.map_comp (f := Lref) (g := Linv) (p := Wspace A))
+      _ = ((Wspace A).map Ls).map Linv := by simpa [hmapEq]
+      _ = (Wspace A).map (Linv.comp Ls) := by
+            simpa using (Submodule.map_comp (f := Ls) (g := Linv) (p := Wspace A)).symm
+      _ = (Wspace A).map LinearMap.id := by simpa [hcomp_inv_s]
+      _ = Wspace A := by simp
+
+  have hgen' : GenericCameras A := ⟨hstack, hcam, hG3⟩
+  have hRigid : RigidBlockScalarStabilizer A := GenericCameras.rigid hgen'
+  have hsConst : ∀ α β : Fin n, sRatio α = sRatio β := hRigid sRatio hstable
+  have hsrow : sRatio row = sRatio i0 := hsConst row i0
+  have hsrow' :
+      modeCoeff m lam row i0 i1 i2 / modeCoeff m lam row a b c =
+        modeCoeff m lam i0 i0 i1 i2 / modeCoeff m lam i0 a b c := by
+    simpa [sRatio, us, usRef, Units.val_mk0, div_eq_mul_inv, mul_assoc, mul_left_comm, mul_comm]
+      using congrArg (fun z : ℝˣ => (z : ℝ)) hsrow
+
+  have hden0 : modeCoeff m lam i0 a b c ≠ 0 :=
+    modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+      (a := a) (b := b) (c := c) hneq i0
+  have hdenrow : modeCoeff m lam row a b c ≠ 0 :=
+    modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+      (a := a) (b := b) (c := c) hneq row
+  have href0 : modeCoeff m lam i0 i0 i1 i2 ≠ 0 :=
+    modeCoeff_ne_zero_of_notAllEqual3 (m := m) (lam := lam) hsupp
+      (a := i0) (b := i1) (c := i2) hNotAll012 i0
+
+  have hcross :
+      modeCoeff m lam row i0 i1 i2 * modeCoeff m lam i0 a b c =
+        modeCoeff m lam i0 i0 i1 i2 * modeCoeff m lam row a b c := by
+    have h := hsrow'
+    field_simp [hdenrow, hden0] at h
+    simpa [mul_assoc, mul_left_comm, mul_comm] using h
+  have hsolve :
+      modeCoeff m lam row a b c =
+        modeCoeff m lam i0 a b c *
+          (modeCoeff m lam row i0 i1 i2 / modeCoeff m lam i0 i0 i1 i2) := by
+    have hbc :
+        modeCoeff m lam row a b c * modeCoeff m lam i0 i0 i1 i2 =
+          modeCoeff m lam row i0 i1 i2 * modeCoeff m lam i0 a b c := by
+      calc
+        modeCoeff m lam row a b c * modeCoeff m lam i0 i0 i1 i2 =
+            modeCoeff m lam i0 i0 i1 i2 * modeCoeff m lam row a b c := by ring
+        _ = modeCoeff m lam row i0 i1 i2 * modeCoeff m lam i0 a b c := by
+            simpa [mul_assoc, mul_left_comm, mul_comm] using hcross.symm
+    have hdiv :
+        modeCoeff m lam row a b c =
+          (modeCoeff m lam row i0 i1 i2 * modeCoeff m lam i0 a b c) /
+            modeCoeff m lam i0 i0 i1 i2 := by
+      exact (eq_div_iff href0).2 (by
+        simpa [mul_assoc, mul_left_comm, mul_comm] using hbc)
+    simpa [div_eq_mul_inv, mul_assoc, mul_left_comm, mul_comm] using hdiv
+
+  simpa [u, μ, hneq, Units.val_mk0, mul_assoc, mul_left_comm, mul_comm] using hsolve
+
 /-- PROVIDED SOLUTION:
 
 This lemma packages steps (3)-(5) of the informal proof in `proofdocs/solution.md`:
@@ -1132,15 +1396,17 @@ Sketch:
   yielding the desired factorization along the `α`-index.
 - Units are used to avoid division-by-zero problems; nonvanishing comes from the support condition.
 -/
-theorem separate_alpha_of_generic {n : ℕ} (A : Fin n → Matrix3x4) (lam : Lambda n)
-    (hgen : RankGenericCameras A)
+theorem separate_alpha_of_generic {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4) (lam : Lambda n)
+    (hgen : GenericCameras A)
     (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
     (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
     ∃ (u : Fin n → ℝˣ) (μ : Fin n → Fin n → Fin n → ℝˣ),
       ∀ α β γ δ, NotAllEqual3 β γ δ →
         lam α β γ δ = (u α : ℝ) * (μ β γ δ : ℝ) := by
   classical
-  sorry
+  simpa [modeCoeff] using
+    (separate_mode_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (m := (0 : Fin 4))
+      (hsupp := hsupp) (hrank := hrank))
 
 /-- PROVIDED SOLUTION:
 
@@ -1150,14 +1416,18 @@ Result:
   `lam α β γ δ = vβ * ναγδ` whenever `(α,γ,δ)` is not all equal.
 -/
 theorem separate_beta_of_generic {n : ℕ} (A : Fin n → Matrix3x4) (lam : Lambda n)
-    (hgen : RankGenericCameras A)
+    (hn : 5 ≤ n) (hgen : GenericCameras A)
     (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
     (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
     ∃ (v : Fin n → ℝˣ) (ν : Fin n → Fin n → Fin n → ℝˣ),
       ∀ α β γ δ, NotAllEqual3 α γ δ →
         lam α β γ δ = (v β : ℝ) * (ν α γ δ : ℝ) := by
   classical
-  sorry
+  rcases separate_mode_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (m := (1 : Fin 4))
+      (hsupp := hsupp) (hrank := hrank) with ⟨v, ν, hsep⟩
+  refine ⟨v, ν, ?_⟩
+  intro α β γ δ hneq
+  simpa [modeCoeff] using hsep β α γ δ hneq
 
 /-- PROVIDED SOLUTION:
 
@@ -1167,14 +1437,18 @@ Result:
   `lam α β γ δ = wγ * ξαβδ` whenever `(α,β,δ)` is not all equal.
 -/
 theorem separate_gamma_of_generic {n : ℕ} (A : Fin n → Matrix3x4) (lam : Lambda n)
-    (hgen : RankGenericCameras A)
+    (hn : 5 ≤ n) (hgen : GenericCameras A)
     (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
     (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
     ∃ (w : Fin n → ℝˣ) (ξ : Fin n → Fin n → Fin n → ℝˣ),
       ∀ α β γ δ, NotAllEqual3 α β δ →
         lam α β γ δ = (w γ : ℝ) * (ξ α β δ : ℝ) := by
   classical
-  sorry
+  rcases separate_mode_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (m := (2 : Fin 4))
+      (hsupp := hsupp) (hrank := hrank) with ⟨w, ξ, hsep⟩
+  refine ⟨w, ξ, ?_⟩
+  intro α β γ δ hneq
+  simpa [modeCoeff] using hsep γ α β δ hneq
 
 /-- PROVIDED SOLUTION:
 
@@ -1184,14 +1458,18 @@ Result:
   `lam α β γ δ = xδ * ζαβγ` whenever `(α,β,γ)` is not all equal.
 -/
 theorem separate_delta_of_generic {n : ℕ} (A : Fin n → Matrix3x4) (lam : Lambda n)
-    (hgen : RankGenericCameras A)
+    (hn : 5 ≤ n) (hgen : GenericCameras A)
     (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
     (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
     ∃ (x : Fin n → ℝˣ) (ζ : Fin n → Fin n → Fin n → ℝˣ),
       ∀ α β γ δ, NotAllEqual3 α β γ →
         lam α β γ δ = (x δ : ℝ) * (ζ α β γ : ℝ) := by
   classical
-  sorry
+  rcases separate_mode_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (m := (3 : Fin 4))
+      (hsupp := hsupp) (hrank := hrank) with ⟨x, ζ, hsep⟩
+  refine ⟨x, ζ, ?_⟩
+  intro α β γ δ hneq
+  simpa [modeCoeff] using hsep δ α β γ hneq
 
 /-- PROVIDED SOLUTION:
 
@@ -1228,27 +1506,115 @@ theorem full_factorization_of_separations {n : ℕ} (hn : 5 ≤ n) (lam : Lambda
       ∀ α β γ δ, NotIdentical α β γ δ →
         lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ) := by
   classical
-  sorry
+  rcases hα with ⟨u, μ, hαeq⟩
+  rcases hβ with ⟨v, ν, hβeq⟩
+  rcases hγ with ⟨w, ξ, hγeq⟩
+  rcases hδ with ⟨x0, ζ, hδeq⟩
+  have _ : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ := hsupp
+  clear hsupp x0 ζ hδeq
 
-/-- PROVIDED SOLUTION:
+  have h0 : (0 : ℕ) < n := Nat.lt_of_lt_of_le (by decide : 0 < 5) hn
+  let i0 : Fin n := ⟨0, h0⟩
 
-`reverse_direction_core` is the formal packaging of the reverse direction argument.
+  let ρ : Fin n → Fin n → ℝˣ := fun γ δ => (u i0)⁻¹ * ν i0 γ δ
 
-Inputs:
-- `GenericCameras A` (intended to include the spanning and rigidity hypotheses)
-- support condition `hsupp`
-- rank bounds `hrank` (derived from `hvanish`)
+  have huvρ :
+      ∀ α β γ δ, γ ≠ δ →
+        lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (ρ γ δ : ℝ) := by
+    intro α β γ δ hgd
+    have hneqβ : NotAllEqual3 β γ δ := by
+      intro h
+      exact hgd h.2
+    have hneqi0 : NotAllEqual3 i0 γ δ := by
+      intro h
+      exact hgd h.2
+    have hμ :
+        (μ β γ δ : ℝ) = (v β : ℝ) * (ρ γ δ : ℝ) := by
+      have hcross :
+          (u i0 : ℝ) * (μ β γ δ : ℝ) = (v β : ℝ) * (ν i0 γ δ : ℝ) := by
+        calc
+          (u i0 : ℝ) * (μ β γ δ : ℝ) = lam i0 β γ δ := (hαeq i0 β γ δ hneqβ).symm
+          _ = (v β : ℝ) * (ν i0 γ δ : ℝ) := hβeq i0 β γ δ hneqi0
+      have hui0 : (u i0 : ℝ) ≠ 0 := (u i0).ne_zero
+      have hdiv :
+          (μ β γ δ : ℝ) = ((v β : ℝ) * (ν i0 γ δ : ℝ)) / (u i0 : ℝ) := by
+        exact (eq_div_iff hui0).2 (by simpa [mul_assoc, mul_left_comm, mul_comm] using hcross)
+      simpa [ρ, div_eq_mul_inv, mul_assoc, mul_left_comm, mul_comm] using hdiv
+    calc
+      lam α β γ δ = (u α : ℝ) * (μ β γ δ : ℝ) := hαeq α β γ δ hneqβ
+      _ = (u α : ℝ) * ((v β : ℝ) * (ρ γ δ : ℝ)) := by rw [hμ]
+      _ = (u α : ℝ) * (v β : ℝ) * (ρ γ δ : ℝ) := by ring
 
-Output:
-- units `u v w x` giving the required factorization on all `NotIdentical` indices.
+  let aPick : Fin n → Fin n := fun δ => Classical.choose (exists_fin_ne_of_five hn δ)
+  have haPick : ∀ δ : Fin n, aPick δ ≠ δ := by
+    intro δ
+    exact Classical.choose_spec (exists_fin_ne_of_five hn δ)
 
-Implementation plan:
-1. Use `separate_*_of_generic` to extract the four partial separations.
-2. Apply `full_factorization_of_separations` (using `hn : 5 ≤ n`) to patch them into the full
-   decomposition.
--/
+  let x : Fin n → ℝˣ := fun δ => ((u (aPick δ)) * (v δ))⁻¹ * ξ (aPick δ) δ δ
+
+  have hfull_ne :
+      ∀ α β γ δ, γ ≠ δ →
+        lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ) := by
+    intro α β γ δ hgd
+    have hnePick : NotAllEqual3 (aPick δ) δ δ := by
+      intro h
+      exact haPick δ h.1
+    have hγpick :
+        lam (aPick δ) δ γ δ = (w γ : ℝ) * (ξ (aPick δ) δ δ : ℝ) :=
+      hγeq (aPick δ) δ γ δ hnePick
+    have huvρ_pick :
+        lam (aPick δ) δ γ δ = (u (aPick δ) : ℝ) * (v δ : ℝ) * (ρ γ δ : ℝ) :=
+      huvρ (aPick δ) δ γ δ hgd
+    have hρ :
+        (ρ γ δ : ℝ) = (w γ : ℝ) * (x δ : ℝ) := by
+      have huvv_ne : ((u (aPick δ) : ℝ) * (v δ : ℝ)) ≠ 0 := by
+        exact mul_ne_zero (u (aPick δ)).ne_zero (v δ).ne_zero
+      have hmult :
+          ((u (aPick δ) : ℝ) * (v δ : ℝ)) * (ρ γ δ : ℝ) =
+            (w γ : ℝ) * (ξ (aPick δ) δ δ : ℝ) := by
+        calc
+          ((u (aPick δ) : ℝ) * (v δ : ℝ)) * (ρ γ δ : ℝ)
+              = lam (aPick δ) δ γ δ := by simpa [mul_assoc] using huvρ_pick.symm
+          _ = (w γ : ℝ) * (ξ (aPick δ) δ δ : ℝ) := hγpick
+      have hscaled := congrArg (fun t => (((u (aPick δ) : ℝ) * (v δ : ℝ))⁻¹) * t) hmult
+      simpa [x, mul_assoc, mul_left_comm, mul_comm, huvv_ne] using hscaled
+    calc
+      lam α β γ δ = (u α : ℝ) * (v β : ℝ) * (ρ γ δ : ℝ) := huvρ α β γ δ hgd
+      _ = (u α : ℝ) * (v β : ℝ) * ((w γ : ℝ) * (x δ : ℝ)) := by rw [hρ]
+      _ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ) := by ring
+
+  refine ⟨u, v, w, x, ?_⟩
+  intro α β γ δ hni
+  by_cases hgd : γ = δ
+  · subst hgd
+    have hneqαβγ : NotAllEqual3 α β γ := by
+      intro h
+      exact hni ⟨h.1, h.2, rfl⟩
+    let η : Fin n := aPick γ
+    have hηne : η ≠ γ := haPick γ
+    have hfactη :
+        lam α β η γ = (u α : ℝ) * (v β : ℝ) * (w η : ℝ) * (x γ : ℝ) :=
+      hfull_ne α β η γ hηne
+    have hγη : lam α β η γ = (w η : ℝ) * (ξ α β γ : ℝ) :=
+      hγeq α β η γ hneqαβγ
+    have hξ :
+        (ξ α β γ : ℝ) = (u α : ℝ) * (v β : ℝ) * (x γ : ℝ) := by
+      have hwη : (w η : ℝ) ≠ 0 := (w η).ne_zero
+      apply (mul_left_cancel₀ hwη)
+      calc
+        (w η : ℝ) * (ξ α β γ : ℝ) = lam α β η γ := hγη.symm
+        _ = (u α : ℝ) * (v β : ℝ) * (w η : ℝ) * (x γ : ℝ) := hfactη
+        _ = (w η : ℝ) * ((u α : ℝ) * (v β : ℝ) * (x γ : ℝ)) := by ring
+    have hγdiag : lam α β γ γ = (w γ : ℝ) * (ξ α β γ : ℝ) :=
+      hγeq α β γ γ hneqαβγ
+    calc
+      lam α β γ γ = (w γ : ℝ) * (ξ α β γ : ℝ) := hγdiag
+      _ = (w γ : ℝ) * ((u α : ℝ) * (v β : ℝ) * (x γ : ℝ)) := by rw [hξ]
+      _ = (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x γ : ℝ) := by ring
+  · exact hfull_ne α β γ δ hgd
+
 theorem reverse_direction_core {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4)
-    (hgen : RankGenericCameras A) (lam : Lambda n)
+    (hgen : GenericCameras A) (lam : Lambda n)
     (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
     (hrank : ∀ m : Fin 4, (Unfold m (scaleQ lam (constructQ A))).rank ≤ 4) :
     ∃ (u v w x : Fin n → ℝˣ),
@@ -1259,29 +1625,33 @@ theorem reverse_direction_core {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4
   have hα : ∃ (u : Fin n → ℝˣ) (μ : Fin n → Fin n → Fin n → ℝˣ),
       ∀ α β γ δ, NotAllEqual3 β γ δ →
         lam α β γ δ = (u α : ℝ) * (μ β γ δ : ℝ) :=
-    separate_alpha_of_generic (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp) (hrank := hrank)
+    separate_alpha_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp)
+      (hrank := hrank)
 
   have hβ : ∃ (v : Fin n → ℝˣ) (ν : Fin n → Fin n → Fin n → ℝˣ),
       ∀ α β γ δ, NotAllEqual3 α γ δ →
         lam α β γ δ = (v β : ℝ) * (ν α γ δ : ℝ) :=
-    separate_beta_of_generic (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp) (hrank := hrank)
+    separate_beta_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp)
+      (hrank := hrank)
 
   have hγ : ∃ (w : Fin n → ℝˣ) (ξ : Fin n → Fin n → Fin n → ℝˣ),
       ∀ α β γ δ, NotAllEqual3 α β δ →
         lam α β γ δ = (w γ : ℝ) * (ξ α β δ : ℝ) :=
-    separate_gamma_of_generic (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp) (hrank := hrank)
+    separate_gamma_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp)
+      (hrank := hrank)
 
   have hδ : ∃ (x : Fin n → ℝˣ) (ζ : Fin n → Fin n → Fin n → ℝˣ),
       ∀ α β γ δ, NotAllEqual3 α β γ →
         lam α β γ δ = (x δ : ℝ) * (ζ α β γ : ℝ) :=
-    separate_delta_of_generic (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp) (hrank := hrank)
+    separate_delta_of_generic (hn := hn) (A := A) (lam := lam) (hgen := hgen) (hsupp := hsupp)
+      (hrank := hrank)
 
   -- Patch the separations into the full `u⊗v⊗w⊗x` factorization.
   exact full_factorization_of_separations (hn := hn) (lam := lam) (hsupp := hsupp)
     (hα := hα) (hβ := hβ) (hγ := hγ) (hδ := hδ)
 
 theorem reverse_direction {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4)
-    (hgen : RankGenericCameras A) (lam : Lambda n)
+    (hgen : GenericCameras A) (lam : Lambda n)
     (hsupp : ∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ)
     (hvanish : IsZeroVec (PolyMap.eval (polyMapF n) (scaleQ lam (constructQ A)))) :
     ∃ (u v w x : Fin n → ℝˣ),
@@ -1306,67 +1676,7 @@ theorem reverse_direction {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4)
   exact reverse_direction_core (hn := hn) (A := A) (hgen := hgen) (lam := lam)
     (hsupp := hsupp) (hrank := hrank)
 
--- ═══════════════════════════════════════════════════════════════
--- Genericity polynomial
--- ═══════════════════════════════════════════════════════════════
 
--- Encode GenericCameras as non-vanishing of a polynomial
--- We construct a nonzero polynomial G whose non-vanishing implies GenericCameras
--- TODO: explicit genericity polynomial G as product of “sum of squares of minors”.
-
-/- PROVIDED SOLUTION:
-
-Goal:
-  For each `n ≥ 5`, construct a nonzero polynomial `G` in the camera entries such that
-  `G(A) ≠ 0 → GenericCameras A`.
-
-This is the standard “Zariski-generic = complement of a proper algebraic set” encoding:
-  each generic condition is a finite conjunction of statements of the form
-    “some determinant/minor is nonzero”,
-  and we combine them into a single polynomial by multiplying “sum-of-squares of minors”.
-
-Concrete construction pattern:
-1) Rank(StackedMat A) = 4.
-   Since `StackedMat A` has exactly 4 columns, it always has rank ≤ 4. So rank = 4 is equivalent to
-   “some 4×4 minor is nonzero”. Define
-     g_stack(A) := ∑_{rows : Fin 4 → RowIdx n} det((StackedMat A).submatrix rows id)^2.
-   Then `g_stack(A) ≠ 0` implies at least one 4×4 minor is nonzero, hence rank(StackedMat A) = 4.
-
-2) Each camera Aα has rank = 3.
-   Each `A α` is `3×4`, hence rank ≤ 3. Rank = 3 is equivalent to “some 3×3 minor is nonzero”.
-   Define for each α:
-     g_cam,α(A) := ∑_{cols : Fin 3 → Fin 4} det((A α).submatrix id cols)^2.
-   Then `g_cam,α(A) ≠ 0` implies rank(A α) = 3.
-
-3) Spanning conditions (G3_m) for the 27-column submatrices of each unfolding.
-   Each such submatrix has shape `3n × 27`. Under the already-known rank bound ≤ 4 for unfoldings
-   of `constructQ A`, “its columns span W” can be enforced by requiring rank = 4. Again, rank = 4
-   can be enforced by “some 4×4 minor is nonzero” on that `3n×27` submatrix.
-   For each mode m and each triple (not all equal), let `S(m,triple,A)` be that `3n×27` matrix.
-   Define:
-     g_span(m,triple,A) := ∑_{rows : Fin 4 → RowIdx n} ∑_{cols : Fin 4 → Fin 27}
-                             det((S(m,triple,A)).submatrix rows cols)^2.
-   Then `g_span(m,triple,A) ≠ 0` forces rank(S)=4, i.e. its columns span the 4D space W.
-
-4) Combine into one polynomial.
-   Let `G(A) := g_stack(A) * (∏α g_cam,α(A)) * (∏_{m,triple} g_span(m,triple,A))`.
-   This is a polynomial in the camera entries because:
-   - each matrix entry is a polynomial in camera entries,
-   - determinants of matrices with polynomial entries are polynomials,
-   - sums/products preserve polynomiality.
-
-5) Show `G ≠ 0`.
-   Provide a single explicit camera family `A₀` satisfying all generic conditions (as in
-   `proofdocs/solution.md`), then check `G(A₀) ≠ 0`. Any polynomial that evaluates to a nonzero real
-   at some point is not the zero polynomial. Hence `G ≠ 0`.
-
-6) Conclude:
-   If `evalCameraPolynomial G A ≠ 0`, then every factor above is nonzero, hence all the generic
-   properties hold, i.e. `GenericCameras A`.
-
-This is exactly the usual “finite intersection of nonempty Zariski-open sets is nonempty Zariski-open”
-argument, packaged into a single polynomial nonvanishing condition.
--/
 noncomputable section AristotleLemmas
 
 def witnessA (n : ℕ) : Fin n → Matrix3x4 :=
@@ -1780,25 +2090,20 @@ theorem nine :
       ∀ n : ℕ, 5 ≤ n →
         ∃ (N : ℕ) (F : PolyMap n N),
           PolyMap.UniformDegreeBound d F ∧
-          ∃ (G : MvPolynomial (AIndex n) ℝ), G ≠ 0 ∧
-            ∀ (A : Fin n → Matrix3x4),
-              evalCameraPolynomial G A ≠ 0 →
-              ∀ (lam : Lambda n),
-                (∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ) →
-                  (IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
-                    (∃ (u v w x : Fin n → ℝˣ),
-                      ∀ α β γ δ, NotIdentical α β γ δ →
-                        lam α β γ δ =
-                          (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
+          ∀ (A : Fin n → Matrix3x4), GenericCameras A →
+            ∀ (lam : Lambda n),
+              (∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ) →
+                (IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
+                  (∃ (u v w x : Fin n → ℝˣ),
+                    ∀ α β γ δ, NotIdentical α β γ δ →
+                      lam α β γ δ =
+                        (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
   refine ⟨5, ?_⟩
   intro n hn
   refine ⟨numMinors n, polyMapF n, polyMapF_degree_bound n, ?_⟩
-  obtain ⟨G, hGne, hGgen⟩ := genericity_polynomial_exists n hn
-  refine ⟨G, hGne, ?_⟩
-  intro A hGA lam hsupp
+  intro A hgen lam hsupp
   constructor
   · intro hvanish
-    have hgen : RankGenericCameras A := hGgen A hGA
     exact reverse_direction hn A hgen lam hsupp hvanish
   · rintro ⟨u, v, w, x, hfact⟩
     exact forward_direction A lam hsupp u v w x hfact
