@@ -2126,7 +2126,7 @@ def StrongGenericityPolynomialExists (n : ℕ) : Prop :=
   ∃ (G : MvPolynomial (AIndex n) ℝ), G ≠ 0 ∧
     ∀ (A : Fin n → Matrix3x4), evalCameraPolynomial G A ≠ 0 → GenericCameras A
 
-/--
+/-
 PROVIDED SOLUTION:
 
 Cleanest path, based on everything you’ve built and the proofs we’ve discussed, is:
@@ -2307,19 +2307,30 @@ For each `n ≥ 5`, construct a nonzero polynomial `G` such that `G(A) ≠ 0 →
 
 Once this is proved, the full unconditional Problem 9 theorem `nine` below will be complete.
 -/
-def G3_minors_sum_sq (n : ℕ) (m : Fin 4) (a b c : Fin n) (rows : Fin 4 → RowIdx n) :
+set_option maxHeartbeats 100000000
+set_option synthInstance.maxHeartbeats 100000
+set_option maxRecDepth 8000
+
+def colsPattern {n : ℕ} (a b c : Fin n) : Fin 4 → Triple3 :=
+  if b = c then
+    ![ (2, 1, 2), (2, 0, 2), (0, 1, 2), (0, 2, 1) ]
+  else if a = c then
+    ![ (1, 2, 2), (2, 2, 0), (0, 1, 2), (0, 2, 1) ]
+  else
+    ![ (1, 2, 2), (2, 0, 2), (0, 1, 2), (0, 2, 1) ]
+
+/-- The 4x4 minor polynomial for a specific mode and triple. -/
+def BlockMinor (n : ℕ) (m : Fin 4) (a b c : Fin n) (rows : Fin 4 → RowIdx n) :
     MvPolynomial (AIndex n) ℝ :=
-  ∑ s : {s : Finset Triple3 // s.card = 4},
-    let cols := fun (i : Fin 4) => s.val.toList.get (i.cast (by simp [s.2]))
-    (Matrix.det (Matrix.of fun i j =>
-      let qidx := modeQIdx m (rows i) (colIdxOfTriple a b c (cols j))
-      (Matrix.det (Matrix.of fun r c => MvPolynomial.X (
-        if r = 0 then (qidx.alpha, qidx.i, c)
-        else if r = 1 then (qidx.beta,  qidx.j, c)
-        else if r = 2 then (qidx.gamma, qidx.k, c)
-        else (qidx.delta, qidx.l, c)
-      )))
-    ))^2
+  let cols := colsPattern a b c
+  Matrix.det (Matrix.of fun i j =>
+    let qidx := modeQIdx m (rows i) (colIdxOfTriple a b c (cols j))
+    (Matrix.det (Matrix.of fun r c => MvPolynomial.X (
+      if r = 0 then (qidx.alpha, qidx.i, c)
+      else if r = 1 then (qidx.beta,  qidx.j, c)
+      else if r = 2 then (qidx.gamma, qidx.k, c)
+      else (qidx.delta, qidx.l, c)
+    ))))
 
 def R0 {n : ℕ} (hn : 5 ≤ n) : Fin 4 → RowIdx n :=
   let h0 : 0 < n := by linarith
@@ -2329,154 +2340,270 @@ def R0 {n : ℕ} (hn : 5 ≤ n) : Fin 4 → RowIdx n :=
 /-- The total G3 genericity polynomial is the product over all modes and all not-all-equal triples. -/
 def G3_total_poly (n : ℕ) (hn : 5 ≤ n) : MvPolynomial (AIndex n) ℝ :=
   ∏ m : Fin 4, ∏ t : {t : Fin n × Fin n × Fin n // NotAllEqual3 t.1 t.2.1 t.2.2},
-    G3_minors_sum_sq n m t.1.1 t.1.2.1 t.1.2.2 (R0 hn)
+    BlockMinor n m t.1.1 t.1.2.1 t.1.2.2 (R0 hn)
+
+lemma eval_BlockMinor_eq_det {n : ℕ} (m : Fin 4) (a b c : Fin n) (rows : Fin 4 → RowIdx n) (A : Fin n → Matrix3x4) :
+    evalCameraPolynomial (BlockMinor n m a b c rows) A =
+    Matrix.det ((Submatrix27 A m a b c).submatrix rows (colsPattern a b c)) := by
+  fin_cases m
+  all_goals {
+    simp only [BlockMinor, evalCameraPolynomial, Submatrix27, Unfold, constructQ, modeQIdx, colIdxOfTriple, stackedRowsMatrix]
+    simp only [RingHom.map_det]
+    apply congr_arg Matrix.det
+    apply Matrix.ext
+    intro i j
+    simp only [Matrix.map_apply, Matrix.of_apply, RingHom.map_det]
+    apply congr_arg Matrix.det
+    apply Matrix.ext
+    intro r c
+    simp only [Matrix.map_apply, Matrix.of_apply, MvPolynomial.eval_X]
+    split_ifs <;> rfl
+  }
+
+lemma blockMinor_ne_zero_at_witness {n : ℕ} (hn : 5 ≤ n) (m : Fin 4) (a b c : Fin n) (hneq : NotAllEqual3 a b c) :
+    evalCameraPolynomial (BlockMinor n m a b c (R0 hn)) (witnessA n) ≠ 0 := by
+  rw [eval_BlockMinor_eq_det]
+  dsimp [colsPattern, witnessA, R0, Submatrix27, Unfold, constructQ, stackedRowsMatrix, modeQIdx, Matrix.submatrix, Matrix.of, colIdxOfTriple]
+  try split_ifs
+  all_goals {
+    -- Use raw simp for basic arithmetic
+    try simp only [Matrix.det_succ_row_zero, Matrix.vecHead, Matrix.vecTail]
+    try simp only [Matrix.cons_val_zero, Matrix.cons_val_succ, Matrix.empty_val', Matrix.cons_val_fin_one, Matrix.head_cons, Matrix.tail_cons]
+    try simp only [Fin.mk_one, Fin.mk_zero]
+    ring_nf
+    intro h_eq
+    try { contradiction }
+    try {
+      apply hneq.2
+      apply Fin.val_injective
+      apply Nat.cast_injective (R := ℝ)
+      exact eq_of_sub_eq_zero h_eq
+    }
+    try {
+      apply hneq.1
+      apply Fin.val_injective
+      apply Nat.cast_injective (R := ℝ)
+      exact eq_of_sub_eq_zero h_eq
+    }
+    try {
+      have h : (b : ℝ) = c := eq_of_sub_eq_zero h_eq
+      have : b = c := Fin.val_injective (Nat.cast_injective h)
+      contradiction
+    }
+    try {
+      have h : (a : ℝ) = c := eq_of_sub_eq_zero h_eq
+      have : a = c := Fin.val_injective (Nat.cast_injective h)
+      contradiction
+    }
+  }
 
 lemma G3_total_poly_ne_zero (n : ℕ) (hn : 5 ≤ n) :
     G3_total_poly n hn ≠ 0 := by
-  sorry
+  intro h0
+  have h_ne_0 : evalCameraPolynomial (G3_total_poly n hn) (witnessA n) ≠ 0 := by
+    rw [G3_total_poly]
+    simp [map_prod]
+    rw [Finset.prod_ne_zero_iff]
+    intro m_idx _
+    rw [Finset.prod_ne_zero_iff]
+    intro t _
+    exact blockMinor_ne_zero_at_witness hn m_idx t.1.1 t.1.2.1 t.1.2.2 t.2
+  have h_eq_0 : evalCameraPolynomial (G3_total_poly n hn) (witnessA n) = 0 := by
+    rw [h0]
+    unfold evalCameraPolynomial
+    simp only [map_zero]
+  exact h_ne_0 h_eq_0
 
-/-- G is the product of rank-genericity and G3-genericity. -/
 def final_G (n : ℕ) (hn : 5 ≤ n) : MvPolynomial (AIndex n) ℝ :=
   (total_genericity_poly n) * (G3_total_poly n hn)
+
+lemma unfold_Q_col_subset_Wspace {n : ℕ} (A : Fin n → Matrix3x4) (m : Fin 4) :
+    ColSpan (Unfold m (constructQ A)) ≤ Wspace A := by
+  apply Submodule.span_le.mpr
+  rintro _ ⟨col, rfl⟩
+  obtain ⟨u, hu⟩ : ∃ u : Fin 4 → ℝ, (Unfold m (constructQ A)).col col = StackedMat A *ᵥ u := by
+    fin_cases m
+    -- m = 0
+    { let M_dummy := stackedRowsMatrix A 0 col.1.1 col.2.1.1 col.2.2.1 0 col.1.2 col.2.1.2 col.2.2.2
+      use M_dummy.adjugateᵀ 0
+      ext p
+      let M_p := stackedRowsMatrix A p.1 col.1.1 col.2.1.1 col.2.2.1 p.2 col.1.2 col.2.1.2 col.2.2.2
+      have h_row0 : (StackedMat A).row p = M_p.row 0 := rfl
+      have h_det : M_p.det = Matrix.dotProduct (M_p.row 0) (M_p.adjugateᵀ 0) := Matrix.det_eq_sum_mul_adjugate_row M_p 0
+      have h_adj : M_p.adjugateᵀ 0 = M_dummy.adjugateᵀ 0 := by
+        ext k
+        simp [Matrix.adjugate, Matrix.cramer, Matrix.of_apply]
+        apply Matrix.det_eq_of_rows_eq
+        intro r hr
+        fin_cases r
+        · contradiction
+        · have : (1 : Fin 4) = 1 := rfl
+          simp [this]
+          rfl
+        · have : (2 : Fin 4) = 2 := rfl
+          simp [this]
+          rfl
+        · have : (3 : Fin 4) = 3 := rfl
+          simp [this]
+          rfl
+      rw [h_det, h_row0, h_adj]
+      rfl }
+    -- m = 1
+    { let M_dummy := stackedRowsMatrix A col.1.1 0 col.2.1.1 col.2.2.1 col.1.2 0 col.2.1.2 col.2.2.2
+      use M_dummy.adjugateᵀ 1
+      ext p
+      let M_p := stackedRowsMatrix A col.1.1 p.1 col.2.1.1 col.2.2.1 col.1.2 p.2 col.2.1.2 col.2.2.2
+      have h_row1 : (StackedMat A).row p = M_p.row 1 := rfl
+      have h_det : M_p.det = Matrix.dotProduct (M_p.row 1) (M_p.adjugateᵀ 1) := Matrix.det_eq_sum_mul_adjugate_row M_p 1
+      have h_adj : M_p.adjugateᵀ 1 = M_dummy.adjugateᵀ 1 := by
+        ext k
+        simp [Matrix.adjugate, Matrix.cramer, Matrix.of_apply]
+        apply Matrix.det_eq_of_rows_eq
+        intro r hr
+        fin_cases r
+        · have : (0 : Fin 4) = 0 := rfl
+          simp [this]
+          rfl
+        · contradiction
+        · have : (2 : Fin 4) = 2 := rfl
+          simp [this]
+          rfl
+        · have : (3 : Fin 4) = 3 := rfl
+          simp [this]
+          rfl
+      rw [h_det, h_row1, h_adj]
+      rfl }
+    -- m = 2
+    { let M_dummy := stackedRowsMatrix A col.1.1 col.2.1.1 0 col.2.2.1 col.1.2 col.2.1.2 0 col.2.2.2
+      use M_dummy.adjugateᵀ 2
+      ext p
+      let M_p := stackedRowsMatrix A col.1.1 col.2.1.1 p.1 col.2.2.1 col.1.2 col.2.1.2 p.2 col.2.2.2
+      have h_row2 : (StackedMat A).row p = M_p.row 2 := rfl
+      have h_det : M_p.det = Matrix.dotProduct (M_p.row 2) (M_p.adjugateᵀ 2) := Matrix.det_eq_sum_mul_adjugate_row M_p 2
+      have h_adj : M_p.adjugateᵀ 2 = M_dummy.adjugateᵀ 2 := by
+        ext k
+        simp [Matrix.adjugate, Matrix.cramer, Matrix.of_apply]
+        apply Matrix.det_eq_of_rows_eq
+        intro r hr
+        fin_cases r
+        · have : (0 : Fin 4) = 0 := rfl
+          simp [this]
+          rfl
+        · have : (1 : Fin 4) = 1 := rfl
+          simp [this]
+          rfl
+        · contradiction -- row 2 removed
+        · have : (3 : Fin 4) = 3 := rfl
+          simp [this]
+          rfl
+      rw [h_det, h_row2, h_adj]
+      rfl }
+    -- m = 3
+    { let M_dummy := stackedRowsMatrix A col.1.1 col.2.1.1 col.2.2.1 0 col.1.2 col.2.1.2 col.2.2.2 0
+      use M_dummy.adjugateᵀ 3
+      ext p
+      let M_p := stackedRowsMatrix A col.1.1 col.2.1.1 col.2.2.1 p.1 col.1.2 col.2.1.2 col.2.2.2 p.2
+      have h_row3 : (StackedMat A).row p = M_p.row 3 := rfl
+      have h_det : M_p.det = Matrix.dotProduct (M_p.row 3) (M_p.adjugateᵀ 3) := Matrix.det_eq_sum_mul_adjugate_row M_p 3
+      have h_adj : M_p.adjugateᵀ 3 = M_dummy.adjugateᵀ 3 := by
+        ext k
+        simp [Matrix.adjugate, Matrix.cramer, Matrix.of_apply]
+        apply Matrix.det_eq_of_rows_eq
+        intro r hr
+        fin_cases r
+        · have : (0 : Fin 4) = 0 := rfl
+          simp [this]
+          rfl
+        · have : (1 : Fin 4) = 1 := rfl
+          simp [this]
+          rfl
+        · have : (2 : Fin 4) = 2 := rfl
+          simp [this]
+          rfl
+        · contradiction
+      rw [h_det, h_row3, h_adj]
+      rfl }
+  use u
+  rw [hu]
+  exact ⟨u, rfl⟩
 
 lemma eval_final_G_ne_zero_imp_GenericCameras {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4) :
     evalCameraPolynomial (final_G n hn) A ≠ 0 → GenericCameras A := by
   intro hG
-  -- First extract the two components of final_G
   have h_rank_poly : evalCameraPolynomial (total_genericity_poly n) A ≠ 0 := by
     unfold final_G evalCameraPolynomial at hG
     simp [MvPolynomial.eval_mul] at hG
     exact hG.1
-
   have h_G3_poly : evalCameraPolynomial (G3_total_poly n hn) A ≠ 0 := by
     unfold final_G evalCameraPolynomial at hG
     simp [MvPolynomial.eval_mul] at hG
     exact hG.2
-
   have h_rank4_stacked : (StackedMat A).rank = 4 := by
     apply eval_poly_sum_sq_stacked_ne_zero
     simp [evalCameraPolynomial, total_genericity_poly, MvPolynomial.eval_mul] at h_rank_poly
     exact h_rank_poly.1
-
   have h_rank3_cam : ∀ α, (A α).rank = 3 := by
     intro α
     apply eval_poly_sum_sq_cam_ne_zero A α
     simp [evalCameraPolynomial, total_genericity_poly, MvPolynomial.eval_mul] at h_rank_poly
     exact Finset.prod_ne_zero_iff.mp h_rank_poly.2 α (Finset.mem_univ α)
-
   simp only [GenericCameras, RankGenericCameras, Wspace]
   refine ⟨h_rank4_stacked, h_rank3_cam, ?_⟩
   intro m
   unfold G3
   intro a b c hne
-  -- We know G3_minors_sum_sq n m a b c (R0 hn) is nonzero for this triple.
-  have h_triple : evalCameraPolynomial (G3_minors_sum_sq n m a b c (R0 hn)) A ≠ 0 := by
+  have h_minor_ne_zero : evalCameraPolynomial (BlockMinor n m a b c (R0 hn)) A ≠ 0 := by
     unfold G3_total_poly evalCameraPolynomial at h_G3_poly
-    simp [MvPolynomial.eval_prod] at h_G3_poly
-    have h_m := Finset.prod_ne_zero_iff.mp h_G3_poly m (Finset.mem_univ m)
-    exact Finset.prod_ne_zero_iff.mp h_m ⟨(a, b, c), hne⟩ (Finset.mem_univ _)
+    simp only [map_prod] at h_G3_poly
+    rw [Finset.prod_ne_zero_iff] at h_G3_poly
+    have h_m := h_G3_poly m (Finset.mem_univ m)
+    rw [Finset.prod_ne_zero_iff] at h_m
+    exact h_m ⟨(a, b, c), hne⟩ (Finset.mem_univ _)
+  let cols := colsPattern a b c
+  let sub27 := Submatrix27 A m a b c
+  let sub4 := sub27.submatrix (R0 hn) (colsPattern a b c)
+  have h_det : sub4.det ≠ 0 := by
+    rw [eval_BlockMinor_eq_det m a b c (R0 hn) A] at h_minor_ne_zero
+    exact h_minor_ne_zero
+  have h_sub_rank4 : sub4.rank = 4 := by
+    have h_rows : LinearIndependent ℝ (fun i => sub4.row i) := Matrix.linearIndependent_rows_of_det_ne_zero h_det
+    rw [Matrix.rank_eq_finrank_span_row]
+    exact finrank_span_eq_card h_rows
+  have h_rank27 : sub27.rank ≥ 4 := by
+    apply le_trans (le_of_eq h_sub_rank4.symm)
+    apply rank_submatrix_le (M := sub27) (r := (R0 hn)) (c := (colsPattern a b c))
+  have h_unfold_rank : (Unfold m (constructQ A)).rank ≤ 4 := rank_unfold_Q_le_4 A m
+  have h_sub27_rank_le : sub27.rank ≤ 4 := by
+    apply le_trans (rank_submatrix_le _ _ _) h_unfold_rank
+  have h_sub27_rank : sub27.rank = 4 := le_antisymm h_sub27_rank_le h_rank27
 
-  -- This implies rank(Submatrix27 A m a b c) ≥ 4.
-  have h_sub_rank : (Submatrix27 A m a b c).rank ≥ 4 := by
-    unfold G3_minors_sum_sq evalCameraPolynomial at h_triple
-    simp [MvPolynomial.eval_sum, sq] at h_triple
-    obtain ⟨s, hs_nonzero⟩ := Finset.exists_ne_zero_of_sum_ne_zero h_triple
-    -- Submatrix with non-zero det has rank ≥ 4.
-    have hdet : Matrix.det (Matrix.of fun i j =>
-      let qidx := modeQIdx m ((R0 hn) i) (colIdxOfTriple a b c (s.val.toList.get (j.cast (by simp [s.2]))))
-      (Matrix.det (Matrix.of fun r c => evalCameraPolynomial (MvPolynomial.X (
-        if r = 0 then (qidx.alpha, qidx.i, c)
-        else if r = 1 then (qidx.beta,  qidx.j, c)
-        else if r = 2 then (qidx.gamma, qidx.k, c)
-        else (qidx.delta, qidx.l, c)
-      )) A))) ≠ 0 := by
-      simpa [sq, evalCameraPolynomial] using hs_nonzero
-    have hq : ∀ i j, (Matrix.of fun i j =>
-      let qidx := modeQIdx m ((R0 hn) i) (colIdxOfTriple a b c (s.val.toList.get (j.cast (by simp [s.2]))))
-      (constructQ A qidx.alpha qidx.beta qidx.gamma qidx.delta qidx.i qidx.j qidx.k qidx.l)) i j =
-      (Submatrix27 A m a b c).submatrix (R0 hn) (fun j => s.val.toList.get (j.cast (by simp [s.2]))) i j := by
-      intro i j; simp [Submatrix27, constructQ, modeQIdx]
-    rw [← hq] at hdet
-    have h_sub_rank_ge_4 : (Matrix.submatrix (Submatrix27 A m a b c) (R0 hn) (fun j => s.val.toList.get (j.cast (by simp [s.2])))).rank = 4 := by
-      apply Matrix.rank_of_det_ne_zero hdet
-    exact h_sub_rank_ge_4.symm.le.trans (rank_submatrix_le _ _ _)
+  have h_subset : ColSpan sub27 ≤ Wspace A := by
+    have h1 : ColSpan sub27 ≤ ColSpan (Unfold m (constructQ A)) := by
+       refine Submodule.span_mono ?_
+       rintro _ ⟨j, rfl⟩
+       use colIdxOfTriple a b c j
+       rfl
+    have h2 : ColSpan (Unfold m (constructQ A)) ≤ Wspace A := unfold_Q_col_subset_Wspace A m
+    exact le_trans h1 h2
 
-  have h_r4 : (Submatrix27 A m a b c).rank = 4 := by
-    have h_unfold_rank : (Unfold m (constructQ A)).rank ≤ 4 := rank_unfold_Q_le_4 A m
-    apply le_antisymm _ h_sub_rank
-    have : (Submatrix27 A m a b c).rank ≤ (Unfold m (constructQ A)).rank := by
-      unfold Submatrix27
-      apply rank_submatrix_le
-    exact le_trans this h_unfold_rank
-
-  have h_unfold_le : ColSpan (Unfold m (constructQ A)) ≤ ColSpan (StackedMat A) := by
-    rw [unfold_constructQ_eq_mul A m]
-    rw [ColSpan, ColSpan]
-    apply Submodule.span_le.mpr
-    rintro _ ⟨j, rfl⟩
-    simp [Matrix.col]
-    rw [Matrix.mul_col]
-    apply Submodule.sum_mem
-    intro i _
-    apply Submodule.smul_mem
-    apply Submodule.subset_span
-    use i, rfl
-
-  have h_sub_le : ColSpan (Submatrix27 A m a b c) ≤ ColSpan (Unfold m (constructQ A)) := by
-    unfold ColSpan Submatrix27
-    apply Submodule.span_mono
-    rintro _ ⟨t, rfl⟩
-    exact ⟨colIdxOfTriple a b c t, rfl⟩
-
-  have hfinS : Module.finrank ℝ (ColSpan (Submatrix27 A m a b c)) = 4 := by
-    have : (Submatrix27 A m a b c).rank = Module.finrank ℝ (ColSpan (Submatrix27 A m a b c)) := by
-      simpa [ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := Submatrix27 A m a b c))
-    simpa [this] using h_r4
-
-  have hfinM : Module.finrank ℝ (ColSpan (StackedMat A)) = 4 := by
-    have : (StackedMat A).rank = Module.finrank ℝ (ColSpan (StackedMat A)) := by
-      simpa [ColSpan] using (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := StackedMat A))
-    simpa [this] using h_rank4_stacked
-
-  exact Submodule.eq_of_le_of_finrank_eq (le_trans h_sub_le h_unfold_le) (hfinS.trans hfinM.symm)
-
+  apply Submodule.eq_of_le_of_finrank_eq h_subset
+  have h1 : Module.finrank ℝ (ColSpan sub27) = 4 := by
+    rw [← h_sub27_rank]
+    exact (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := sub27)).symm
+  have h2 : Module.finrank ℝ (Wspace A) = 4 := by
+    rw [← h_rank4_stacked]
+    exact (Matrix.rank_eq_finrank_span_cols (R := ℝ) (A := StackedMat A)).symm
+  rw [h1, h2]
 
 theorem strong_genericity_polynomial_exists (n : ℕ) (hn : 5 ≤ n) :
     StrongGenericityPolynomialExists n := by
   use final_G n hn
   constructor
-  · apply mul_ne_zero (total_genericity_poly_ne_zero hn) (G3_total_poly_ne_zero n hn)
-  · intro A hGA
-    exact eval_final_G_ne_zero_imp_GenericCameras hn A hGA
-
-theorem nine_of_hStrong
-    (hStrong : ∀ n : ℕ, 5 ≤ n → StrongGenericityPolynomialExists n) :
-    ∃ (d : ℕ),
-      ∀ n : ℕ, 5 ≤ n →
-        ∃ (N : ℕ) (F : PolyMap n N),
-          PolyMap.UniformDegreeBound d F ∧
-          ∃ (G : MvPolynomial (AIndex n) ℝ), G ≠ 0 ∧
-            ∀ (A : Fin n → Matrix3x4),
-              evalCameraPolynomial G A ≠ 0 →
-              ∀ (lam : Lambda n),
-                (∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ) →
-                  (IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
-                    (∃ (u v w x : Fin n → ℝˣ),
-                      ∀ α β γ δ, NotIdentical α β γ δ →
-                        lam α β γ δ =
-                          (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
-  refine ⟨5, ?_⟩
-  intro n hn
-  refine ⟨numMinors n, polyMapF n, polyMapF_degree_bound n, ?_⟩
-  rcases hStrong n hn with ⟨G, hGne, hGgen⟩
-  refine ⟨G, hGne, ?_⟩
-  intro A hGA lam hsupp
-  have hgen : GenericCameras A := hGgen A hGA
-  constructor
-  · intro hvanish
-    exact reverse_direction hn A hgen lam hsupp hvanish
-  · rintro ⟨u, v, w, x, hfact⟩
-    exact forward_direction A lam hsupp u v w x hfact
+  · unfold final_G
+    apply mul_ne_zero
+    · exact total_genericity_poly_ne_zero hn
+    · exact G3_total_poly_ne_zero n hn
+  · exact eval_final_G_ne_zero_imp_GenericCameras hn
 
 theorem nine :
     ∃ (d : ℕ),
@@ -2493,4 +2620,14 @@ theorem nine :
                       ∀ α β γ δ, NotIdentical α β γ δ →
                         lam α β γ δ =
                           (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
-  exact nine_of_hStrong (fun n hn => strong_genericity_polynomial_exists n hn)
+  obtain ⟨d, hd⟩ := nine_core
+  refine ⟨d, ?_⟩
+  intro n hn
+  rcases hd n hn with ⟨N, F, hF_deg, hF_main⟩
+  refine ⟨N, F, hF_deg, ?_⟩
+  rcases strong_genericity_polynomial_exists n hn with ⟨G, hG_ne, hG_imp⟩
+  refine ⟨G, hG_ne, ?_⟩
+  intro A hGA
+  exact hF_main A (hG_imp A hGA)
+
+end Arxiv.«2602.05192»
