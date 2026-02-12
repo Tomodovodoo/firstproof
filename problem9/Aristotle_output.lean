@@ -2106,11 +2106,23 @@ lemma eval_poly_Submatrix27_entry {n : ℕ} (A : Fin n → Matrix3x4) (m : Fin 4
     evalCameraPolynomial (poly_Submatrix27_entry n m a b c row t) A = Submatrix27 A m a b c row t := by
       unfold Arxiv.«2602.05192».poly_Submatrix27_entry Submatrix27;
       unfold Arxiv.«2602.05192».poly_Unfold_entry
-      fin_cases m <;> simp [Unfold];
-      · exact?;
-      · exact?;
-      · convert eval_poly_constructQ_entry A _ _ _ _ _ _ _ _ using 1;
-      · exact?
+      fin_cases m <;> simp [Unfold]
+      · exact
+          eval_poly_constructQ_entry A row.1 (colIdxOfTriple a b c t).1.1
+            (colIdxOfTriple a b c t).2.1.1 (colIdxOfTriple a b c t).2.2.1 row.2
+            (colIdxOfTriple a b c t).1.2 (colIdxOfTriple a b c t).2.1.2 (colIdxOfTriple a b c t).2.2.2
+      · exact
+          eval_poly_constructQ_entry A (colIdxOfTriple a b c t).1.1 row.1
+            (colIdxOfTriple a b c t).2.1.1 (colIdxOfTriple a b c t).2.2.1 (colIdxOfTriple a b c t).1.2
+            row.2 (colIdxOfTriple a b c t).2.1.2 (colIdxOfTriple a b c t).2.2.2
+      · exact
+          eval_poly_constructQ_entry A (colIdxOfTriple a b c t).1.1 (colIdxOfTriple a b c t).2.1.1
+            row.1 (colIdxOfTriple a b c t).2.2.1 (colIdxOfTriple a b c t).1.2
+            (colIdxOfTriple a b c t).2.1.2 row.2 (colIdxOfTriple a b c t).2.2.2
+      · exact
+          eval_poly_constructQ_entry A (colIdxOfTriple a b c t).1.1 (colIdxOfTriple a b c t).2.1.1
+            (colIdxOfTriple a b c t).2.2.1 row.1 (colIdxOfTriple a b c t).1.2
+            (colIdxOfTriple a b c t).2.1.2 (colIdxOfTriple a b c t).2.2.2 row.2
 
 open scoped BigOperators
 open Classical Matrix
@@ -2162,9 +2174,7 @@ lemma G3_of_rank_ge_4 {n : ℕ} (A : Fin n → Matrix3x4) (m : Fin 4) (a b c : F
     ColSpan (Submatrix27 A m a b c) = Wspace A := by
       intro h1 h2;
       refine' Submodule.eq_of_le_of_finrank_eq _ _;
-      · intro x hx aesop;
-        intro hx';
-        obtain ⟨ s, rfl ⟩ := hx';
+      · intro x hx
         have h_submatrix : ∀ p : Triple3, (Submatrix27 A m a b c).col p ∈ ColSpan (StackedMat A) := by
           intro p
           have h_submatrix : (Submatrix27 A m a b c).col p ∈ ColSpan (Unfold m (constructQ A)) := by
@@ -2190,7 +2200,7 @@ lemma G3_of_rank_ge_4 {n : ℕ} (A : Fin n → Matrix3x4) (m : Fin 4) (a b c : F
           · exact Submodule.zero_mem _;
           · exact Submodule.add_mem _ ‹_› ‹_›;
           · exact Submodule.smul_mem _ _ ‹_›;
-        exact Set.mem_iInter.mpr fun p => by aesop;
+        exact h_submatrix x hx
       · refine' le_antisymm _ _;
         · refine' Submodule.finrank_mono _;
           intro x hx;
@@ -2198,11 +2208,10 @@ lemma G3_of_rank_ge_4 {n : ℕ} (A : Fin n → Matrix3x4) (m : Fin 4) (a b c : F
           have h_subset : ColSpan (Submatrix27 A m a b c) ≤ ColSpan (Unfold m (constructQ A)) := by
             refine' Submodule.span_le.mpr _;
             rintro _ ⟨ t, rfl ⟩;
-            refine' Submodule.subset_span ⟨ colIdxOfTriple a b c t, _ ⟩;
-            exact?;
+            refine' Submodule.subset_span ⟨ colIdxOfTriple a b c t, rfl ⟩;
           have h_subset : ColSpan (Unfold m (constructQ A)) ≤ ColSpan (StackedMat A) := by
             have h_subset : Unfold m (constructQ A) = StackedMat A * cofactorMat A m := by
-              exact?;
+              exact unfold_constructQ_eq_mul A m
             rw [h_subset];
             unfold ColSpan;
             rw [ Submodule.span_le ];
@@ -2225,7 +2234,7 @@ open scoped BigOperators
 open Classical Matrix
 open Arxiv.«2602.05192»
 
-lemma eval_strong_genericity_poly_ne_zero_imp_generic {n : ℕ} (hn : 5 ≤ n) (A : Fin n → Matrix3x4) :
+lemma eval_strong_genericity_poly_ne_zero_imp_generic {n : ℕ} (_hn : 5 ≤ n) (A : Fin n → Matrix3x4) :
     evalCameraPolynomial (strong_genericity_poly n) A ≠ 0 → GenericCameras A := by
       intro h_nonzero;
       refine' ⟨ _, _, _ ⟩;
@@ -2250,14 +2259,14 @@ lemma eval_strong_genericity_poly_ne_zero_imp_generic {n : ℕ} (hn : 5 ≤ n) (
           unfold Arxiv.«2602.05192».strong_genericity_poly;
           unfold Arxiv.«2602.05192».total_genericity_poly; simp_all +decide [ Arxiv.«2602.05192».evalCameraPolynomial ] ;
         apply G3_of_rank_ge_4 A m a b c (by
-        exact?) (by
-        exact?)
+          exact eval_poly_sum_sq_stacked_ne_zero A h_eval_stacked) (by
+          exact eval_poly_sum_sq_G3_block_ne_zero A m a b c h_eval_G3)
 
 open scoped BigOperators
 open Classical Matrix
 open Arxiv.«2602.05192»
 
-def witnessCols {n : ℕ} (a b c : Fin n) : Fin 4 → Triple3 :=
+def witnessCols {n : ℕ} (_a b c : Fin n) : Fin 4 → Triple3 :=
   fun k =>
     if b ≠ c then
       match k with
@@ -2283,7 +2292,7 @@ open scoped BigOperators
 open Classical Matrix
 open Arxiv.«2602.05192»
 
-lemma witnessCofactorMatrix_det_ne_zero {n : ℕ} (hn : 5 ≤ n) (m : Fin 4) (a b c : Fin n) (h : NotAllEqual3 a b c) :
+lemma witnessCofactorMatrix_det_ne_zero {n : ℕ} (m : Fin 4) (a b c : Fin n) (h : NotAllEqual3 a b c) :
     (witnessCofactorMatrix n m a b c).det ≠ 0 := by
   fin_cases m
   · by_cases hbc : b = c
@@ -2358,7 +2367,7 @@ lemma witnessSubmatrix_eq {n : ℕ} (m : Fin 4) (a b c : Fin n) :
       unfold Submatrix27 Arxiv.«2602.05192».StackedMat Arxiv.«2602.05192».witnessCofactorMatrix;
       ext ⟨ α, i ⟩ j; simp +decide [ Arxiv.«2602.05192».Unfold, Arxiv.«2602.05192».constructQ ] ;
       fin_cases m <;> simp +decide [ Matrix.mul_apply, Arxiv.«2602.05192».stackedRowsMatrix, Arxiv.«2602.05192».constructQ ];
-      · rw [ Matrix.det_succ_row_zero ] ; norm_num [ Fin.sum_univ_succ ] ; ring!;
+      · rw [ Matrix.det_succ_row_zero ] ; norm_num [ Fin.sum_univ_succ ] ; ring_nf!;
         unfold Arxiv.«2602.05192».cofactorMat; simp +decide [ Matrix.det_succ_row_zero ] ; ring!;
       · simp +decide [ Matrix.det_succ_row_zero, Arxiv.«2602.05192».cofactorMat ];
         simp +decide [ Fin.sum_univ_succ, Arxiv.«2602.05192».fixedRowsMat, Arxiv.«2602.05192».witnessA ] ; ring!;
@@ -2368,7 +2377,7 @@ lemma witnessSubmatrix_eq {n : ℕ} (m : Fin 4) (a b c : Fin n) :
         simp +decide [ Fin.succAbove, Arxiv.«2602.05192».witnessA ] at *;
       · rw [ Matrix.det_succ_row _ 3 ] ; simp +decide [ Fin.sum_univ_succ, Arxiv.«2602.05192».cofactorMat ];
         unfold Arxiv.«2602.05192».fixedRowsMat; simp +decide [ Matrix.det_succ_row _ 3 ] ;
-        exact?
+        exact rfl
 
 open scoped BigOperators
 open Classical Matrix
@@ -2378,11 +2387,11 @@ lemma witnessA_G3_rank {n : ℕ} (hn : 5 ≤ n) (m : Fin 4) (a b c : Fin n) (h :
     (Submatrix27 (witnessA n) m a b c).rank ≥ 4 := by
       -- By `witnessCofactorMatrix_det_ne_zero`, `det(C) \ne 0`, so `C` is invertible.
       have h_C_inv : Matrix.det (witnessCofactorMatrix n m a b c) ≠ 0 := by
-        exact?;
+        exact witnessCofactorMatrix_det_ne_zero m a b c h;
       -- Since `S' = StackedMat (witnessA n) * C`, and `C` is invertible, we have `rank(S') = rank(StackedMat (witnessA n))`.
       have h_rank_S' : Matrix.rank (Submatrix27 (witnessA n) m a b c |>.submatrix id (witnessCols a b c)) = Matrix.rank (StackedMat (witnessA n)) := by
         have h_S'_eq : (Submatrix27 (witnessA n) m a b c).submatrix id (witnessCols a b c) = (StackedMat (witnessA n)) * (witnessCofactorMatrix n m a b c) := by
-          exact?;
+          exact witnessSubmatrix_eq m a b c;
         have := Matrix.rank_mul_le ( StackedMat ( witnessA n ) ) ( witnessCofactorMatrix n m a b c ) ; aesop;
       have h_rank_S : Matrix.rank (StackedMat (witnessA n)) = 4 := by
         convert ( witnessA_properties hn ) |>.1;
@@ -2429,7 +2438,7 @@ end AristotleLemmas
 theorem strong_genericity_polynomial_exists (n : ℕ) (hn : 5 ≤ n) :
     StrongGenericityPolynomialExists n := by
   have hG3 : ∀ m : Fin 4, ∀ a b c : Fin n, NotAllEqual3 a b c → poly_sum_sq_G3_block n m a b c ≠ 0 := by
-    exact?;
+    exact fun m a b c h => poly_sum_sq_G3_block_ne_zero_poly hn m a b c h
   exact ⟨ _, mul_ne_zero ( total_genericity_poly_ne_zero hn ) ( Finset.prod_ne_zero_iff.mpr fun m hm => Finset.prod_ne_zero_iff.mpr fun a ha => Finset.prod_ne_zero_iff.mpr fun b hb => Finset.prod_ne_zero_iff.mpr fun c hc => by aesop ), fun A hA => eval_strong_genericity_poly_ne_zero_imp_generic hn A hA ⟩
 
 
