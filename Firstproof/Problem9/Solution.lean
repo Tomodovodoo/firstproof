@@ -7,6 +7,7 @@ scalings of determinantal tensors from cameras.
 -/
 
 import Mathlib
+import Firstproof.Problem9.Formalisation
 
 
 set_option maxHeartbeats 3200000
@@ -28,65 +29,6 @@ open Classical Matrix
 noncomputable section
 
 namespace Arxiv.«2602.05192»
-
--- ═══════════════════════════════════════════════════════════════
--- Core types (from problem9_formalisation.lean)
--- ═══════════════════════════════════════════════════════════════
-
-abbrev Matrix3x4 := Matrix (Fin 3) (Fin 4) ℝ
-
-abbrev Tensor3333 := Fin 3 → Fin 3 → Fin 3 → Fin 3 → ℝ
-
-abbrev QFamily (n : ℕ) := Fin n → Fin n → Fin n → Fin n → Tensor3333
-
-abbrev Lambda (n : ℕ) := Fin n → Fin n → Fin n → Fin n → ℝ
-
-def NotIdentical {n : ℕ} (α β γ δ : Fin n) : Prop := ¬ (α = β ∧ β = γ ∧ γ = δ)
-
-def scaleQ {n : ℕ} (lam : Lambda n) (Q : QFamily n) : QFamily n :=
-  fun α β γ δ i j k ℓ => (lam α β γ δ) * (Q α β γ δ i j k ℓ)
-
-abbrev AIndex (n : ℕ) := Fin n × Fin 3 × Fin 4
-
-def stackedRowsMatrix {n : ℕ} (A : Fin n → Matrix3x4)
-    (α β γ δ : Fin n) (i j k ℓ : Fin 3) : Matrix (Fin 4) (Fin 4) ℝ :=
-  Matrix.of ![A α i, A β j, A γ k, A δ ℓ]
-
-def constructQ {n : ℕ} (A : Fin n → Matrix3x4) : QFamily n :=
-  fun α β γ δ i j k ℓ => Matrix.det (stackedRowsMatrix A α β γ δ i j k ℓ)
-
-structure QIndex (n : ℕ) where
-  alpha : Fin n
-  beta  : Fin n
-  gamma : Fin n
-  delta : Fin n
-  i : Fin 3
-  j : Fin 3
-  k : Fin 3
-  l : Fin 3
-deriving DecidableEq
-
-instance {n : ℕ} : Fintype (QIndex n) :=
-  Fintype.ofEquiv (Fin n × Fin n × Fin n × Fin n × Fin 3 × Fin 3 × Fin 3 × Fin 3)
-    { toFun := fun ⟨a, b, c, d, i, j, k, l⟩ => ⟨a, b, c, d, i, j, k, l⟩
-      invFun := fun ⟨a, b, c, d, i, j, k, l⟩ => ⟨a, b, c, d, i, j, k, l⟩
-      left_inv := fun ⟨_, _, _, _, _, _, _, _⟩ => rfl
-      right_inv := fun ⟨_, _, _, _, _, _, _, _⟩ => rfl }
-
-abbrev PolyMap (n N : ℕ) := Fin N → MvPolynomial (QIndex n) ℝ
-
-def PolyMap.eval {n N : ℕ} (F : PolyMap n N) (Q : QFamily n) : Fin N → ℝ :=
-  fun t =>
-    (F t).eval (fun v : QIndex n => Q v.alpha v.beta v.gamma v.delta v.i v.j v.k v.l)
-
-def PolyMap.UniformDegreeBound {n N : ℕ} (d : ℕ) (F : PolyMap n N) : Prop :=
-  ∀ t : Fin N, (F t).totalDegree ≤ d
-
-def IsZeroVec {N : ℕ} (v : Fin N → ℝ) : Prop := ∀ t, v t = 0
-
-def evalCameraPolynomial {n : ℕ} (p : MvPolynomial (AIndex n) ℝ)
-    (A : Fin n → Matrix3x4) : ℝ :=
-  p.eval (fun idx : AIndex n => A idx.1 idx.2.1 idx.2.2)
 
 -- ═══════════════════════════════════════════════════════════════
 -- Reindexing
@@ -2471,19 +2413,5 @@ theorem nine_of_hStrong
   · rintro ⟨u, v, w, x, hfact⟩
     exact forward_direction A lam hsupp u v w x hfact
 
-theorem nine :
-    ∃ (d : ℕ),
-      ∀ n : ℕ, 5 ≤ n →
-        ∃ (N : ℕ) (F : PolyMap n N),
-          PolyMap.UniformDegreeBound d F ∧
-          ∃ (G : MvPolynomial (AIndex n) ℝ), G ≠ 0 ∧
-            ∀ (A : Fin n → Matrix3x4),
-              evalCameraPolynomial G A ≠ 0 →
-              ∀ (lam : Lambda n),
-                (∀ α β γ δ, (lam α β γ δ ≠ 0) ↔ NotIdentical α β γ δ) →
-                  (IsZeroVec (PolyMap.eval F (scaleQ lam (constructQ A))) ↔
-                    (∃ (u v w x : Fin n → ℝˣ),
-                      ∀ α β γ δ, NotIdentical α β γ δ →
-                        lam α β γ δ =
-                          (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
+theorem nine : NineStatement := by
   exact nine_of_hStrong (fun n hn => strong_genericity_polynomial_exists n hn)

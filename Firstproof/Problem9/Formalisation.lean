@@ -1,22 +1,4 @@
-/-
-Copyright 2026 The Formal Conjectures Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    https://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
--/
-
-import Mathlib.LinearAlgebra.Matrix.Determinant.Basic
-import Mathlib.RingTheory.MvPolynomial.Basic
-import Mathlib.Data.Real.Basic
+import Mathlib
 
 /-!
 # Theorem 9 (arXiv:2602.05192)
@@ -64,16 +46,7 @@ abbrev AIndex (n : ℕ) := Fin n × Fin 3 × Fin 4
 (Row order: `(α,i), (β,j), (γ,k), (δ,ℓ)`.) -/
 def stackedRowsMatrix {n : ℕ} (A : Fin n → Matrix3x4)
     (α β γ δ : Fin n) (i j k ℓ : Fin 3) : Matrix (Fin 4) (Fin 4) ℝ :=
-  fun r c =>
-    Fin.cases (A α i c)
-      (fun r1 : Fin 3 =>
-        Fin.cases (A β j c)
-          (fun r2 : Fin 2 =>
-            Fin.cases (A γ k c)
-              (fun _r3 : Fin 1 => A δ ℓ c)
-              r2)
-          r1)
-      r
+  Matrix.of ![A α i, A β j, A γ k, A δ ℓ]
 
 /--
 `constructQ A` is the family of tensors `Q^(αβγδ)` constructed from `A` by taking `4×4`
@@ -92,6 +65,14 @@ structure QIndex (n : ℕ) where
   j : Fin 3
   k : Fin 3
   l : Fin 3
+deriving DecidableEq
+
+instance {n : ℕ} : Fintype (QIndex n) :=
+  Fintype.ofEquiv (Fin n × Fin n × Fin n × Fin n × Fin 3 × Fin 3 × Fin 3 × Fin 3)
+    { toFun := fun ⟨a, b, c, d, i, j, k, l⟩ => ⟨a, b, c, d, i, j, k, l⟩
+      invFun := fun ⟨a, b, c, d, i, j, k, l⟩ => ⟨a, b, c, d, i, j, k, l⟩
+      left_inv := fun ⟨_, _, _, _, _, _, _, _⟩ => rfl
+      right_inv := fun ⟨_, _, _, _, _, _, _, _⟩ => rfl }
 
 /-- A polynomial map `QFamily n → ℝ^N`, represented by coordinate polynomials. -/
 abbrev PolyMap (n N : ℕ) := Fin N → MvPolynomial (QIndex n) ℝ
@@ -114,19 +95,11 @@ def evalCameraPolynomial {n : ℕ} (p : MvPolynomial (AIndex n) ℝ)
   p.eval (fun idx : AIndex n => A idx.1 idx.2.1 idx.2.2)
 
 /--
-## Theorem 9 (arXiv:2602.05192)
-
-There exists a polynomial map `F` with uniform degree bound `d` (independent of `n`) such that
-for all `n ≥ 5`, for Zariski-generic cameras `A`, and for all scalars `λ` supported exactly on
-non-identical quadruples:
-
-`F(λ · Q) = 0  ↔  λ factors as u_α v_β w_γ x_δ`.
-
-"Zariski-generic" is encoded by the existence of a **nonzero polynomial** `G` in the camera
-entries (`AIndex n = Fin n × Fin 3 × Fin 4`) such that whenever `G(A) ≠ 0`, the biconditional
-holds. A nonzero polynomial over `ℝ^k` is nonvanishing on a nonempty Zariski-open dense set.
+For `n ≥ 5` and generic cameras `A : Fin n → ℝ^{3×4}`, there exists a polynomial map `F`
+(with uniformly bounded degree) whose vanishing on a blockwise scaling `λ · Q(A)` characterizes
+when `λ` factors as `u_α v_β w_γ x_δ` on non-identical index tuples.
 -/
-theorem nine :
+def NineStatement : Prop :=
     ∃ (d : ℕ),
       ∀ n : ℕ, 5 ≤ n →
         ∃ (N : ℕ) (F : PolyMap n N),
@@ -140,7 +113,6 @@ theorem nine :
                     (∃ (u v w x : Fin n → ℝˣ),
                       ∀ α β γ δ, NotIdentical α β γ δ →
                         lam α β γ δ =
-                          (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ))) := by
-  sorry
+                          (u α : ℝ) * (v β : ℝ) * (w γ : ℝ) * (x δ : ℝ)))
 
 end Arxiv.«2602.05192»
