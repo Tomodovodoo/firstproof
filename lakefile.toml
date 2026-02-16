@@ -1,16 +1,16 @@
 name = "firstproof"
 version = "0.1.0"
-defaultTargets = ["firstproof"]
+defaultTargets = ["Firstproof"]
 
 [[require]]
 name = "mathlib"
-git = "https://github.com/leanprover-community/mathlib4"
-rev = "v4.24.0"
+scope = "leanprover-community"
+rev = "v4.22.0"
+
+[[require]]
+name = "formal_conjectures"
+git = "https://github.com/google-deepmind/formal-conjectures"
+rev = "6fc02d5eb4c2b0eb6a0bf08aa1d339f2b384389e"
 
 [[lean_lib]]
 name = "Firstproof"
-roots = ["Firstproof", "problem9.problem9_solution"]
-
-[[lean_exe]]
-name = "firstproof"
-root = "Main"

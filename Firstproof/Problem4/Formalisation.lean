@@ -16,6 +16,8 @@ limitations under the License.
 
 import FormalConjectures.Util.ProblemImports
 
+set_option linter.style.copyright false
+
 /-!
 # Theorem 4
 
